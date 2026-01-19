@@ -68,16 +68,17 @@ export function pruneScriptlet(scriptlet, includeHosts) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = 
-[${newScriptletFunctions.join(',')}];
+const $scriptletFunctions$ = [
+${newScriptletFunctions.join(',\n')}
+];
 
-const $scriptletArgs$ = ${JSON.stringify(newScriptletArgs)};
+const $scriptletArgs$ = ${JSON.stringify(newScriptletArgs, null, 2)};
 
 const $scriptletArglists$ = "${newScriptletArglists}";
 
 const $scriptletArglistRefs$ = "${newScriptletArglistRefs}";
 
-const $scriptletHostnames$ = ${JSON.stringify(newScriptletHostnames)};
+const $scriptletHostnames$ = ${JSON.stringify(newScriptletHostnames, null, 2)};
 
 const $scriptletFromRegexes$ = [];
 
