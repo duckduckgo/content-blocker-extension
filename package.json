@@ -1,0 +1,22 @@
+{
+    "name": "content-blocker-extension",
+    "version": "1.0.0",
+    "description": "",
+    "license": "GPLv3",
+    "main": "index.js",
+    "scripts": {
+        "update": "node ./scripts/update.mjs && npm run lint-fix",
+        "package": "zx ./scripts/package.mjs",
+        "lint": "eslint . && prettier . --check",
+        "lint-fix": "eslint . --fix && prettier . --write"
+    },
+    "devDependencies": {
+        "@duckduckgo/eslint-config": "github:duckduckgo/eslint-config#v0.1.0",
+        "crx3-utils": "^0.0.3",
+        "eslint": "^9.39.2",
+        "globals": "^17.0.0",
+        "prettier": "^3.7.4",
+        "vm2": "^3.10.1",
+        "zx": "^8.8.5"
+    }
+}
