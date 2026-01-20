@@ -1,0 +1,70 @@
+name: Daily Update
+
+on:
+    schedule:
+        # Run daily at 8am CET (7am UTC)
+        - cron: '0 7 * * *'
+    workflow_dispatch: # Allow manual triggering
+
+jobs:
+    update:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run update script
+              run: npm run update
+
+            - name: Check for changes in src/scriptlets
+              id: check-changes
+              run: |
+                  if git diff --quiet HEAD -- src/scriptlets/; then
+                    echo "changed=false" >> $GITHUB_OUTPUT
+                    echo "No changes detected in src/scriptlets directory"
+                  else
+                    echo "changed=true" >> $GITHUB_OUTPUT
+                    echo "Changes detected in src/scriptlets directory"
+                    git diff --stat HEAD -- src/scriptlets/
+                  fi
+
+            - name: Stage changes in src/
+              if: steps.check-changes.outputs.changed == 'true'
+              run: |
+                  git add src/
+
+            - name: Create Pull Request
+              if: steps.check-changes.outputs.changed == 'true'
+              uses: peter-evans/create-pull-request@v6
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  branch: update/scriptlets-auto
+                  delete-branch: true
+                  title: 'chore: update scriptlets from uBlock Origin'
+                  body: |
+                      This PR was automatically created by the daily update workflow.
+
+                      Changes in this PR:
+                      - Updated scriptlets from uBlock Origin filter lists
+                  commit-message: 'chore: update scriptlets from uBlock Origin'
+                  committer: 'GitHub Action <action@github.com>'
+                  author: 'GitHub Action <action@github.com>'
+                  labels: |
+                      automated
+                      dependencies
