@@ -1,0 +1,84 @@
+name: 'Release'
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - 'src/manifest.json'
+    workflow_dispatch:
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  cache: 'npm'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Setup CRX signing key
+              run: |
+                  echo "${{ secrets.CRX_SIGNING_KEY }}" > /tmp/crx-signing-key.pem
+                  chmod 600 /tmp/crx-signing-key.pem
+
+            - name: Package extension
+              run: npm run package
+              env:
+                  CRX_SIGNING_KEY: /tmp/crx-signing-key.pem
+
+            - name: Cleanup signing key
+              if: always()
+              run: rm -f /tmp/crx-signing-key.pem
+
+            - name: Read version from manifest
+              id: version
+              run: |
+                  VERSION=$(node -p "require('./src/manifest.json').version")
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Release version: $VERSION"
+
+            - name: Check if release already exists
+              id: check-release
+              run: |
+                  VERSION="${{ steps.version.outputs.version }}"
+                  if gh release view "v$VERSION" &>/dev/null; then
+                      echo "exists=true" >> $GITHUB_OUTPUT
+                      echo "Release v$VERSION already exists. Skipping release creation."
+                  else
+                      echo "exists=false" >> $GITHUB_OUTPUT
+                      echo "Release v$VERSION does not exist. Proceeding with release creation."
+                  fi
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Create GitHub Release
+              if: steps.check-release.outputs.exists == 'false'
+              run: |
+                  VERSION="${{ steps.version.outputs.version }}"
+                  ARTIFACTS=()
+                  if [ -f "./dist/content-blocker-extension-${VERSION}.zip" ]; then
+                      ARTIFACTS+=("./dist/content-blocker-extension-${VERSION}.zip")
+                  fi
+                  if [ -f "./dist/content-blocker-extension-${VERSION}.crx" ]; then
+                      ARTIFACTS+=("./dist/content-blocker-extension-${VERSION}.crx")
+                  fi
+                  if [ ${#ARTIFACTS[@]} -eq 0 ]; then
+                      echo "No artifacts found in dist directory"
+                      exit 1
+                  fi
+                  gh release create "v$VERSION" \
+                      --title "v$VERSION" \
+                      --notes "Release v$VERSION" \
+                      "${ARTIFACTS[@]}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
