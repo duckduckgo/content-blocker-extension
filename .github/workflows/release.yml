@@ -67,7 +67,7 @@ jobs:
                   VERSION="${{ steps.version.outputs.version }}"
                   CRX_FILE="./dist/content-blocker-extension-${VERSION}.crx"
                   if [ -f "$CRX_FILE" ]; then
-                      aws s3 cp "$CRX_FILE" "s3://${{ secrets.AWS_S3_BUCKET }}/extensions/content-blocker/content-blocker-extension-${VERSION}.crx"
+                      aws s3 cp "$CRX_FILE" "s3://${{ secrets.AWS_S3_BUCKET }}/extensions/content-blocker/content-blocker-extension-${VERSION}.crx" --acl public-read
                       echo "Uploaded CRX file to S3"
                   else
                       echo "CRX file not found, skipping S3 upload"
