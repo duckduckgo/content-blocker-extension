@@ -61,6 +61,22 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Upload CRX to S3
+              if: steps.check-release.outputs.exists == 'false'
+              run: |
+                  VERSION="${{ steps.version.outputs.version }}"
+                  CRX_FILE="./dist/content-blocker-extension-${VERSION}.crx"
+                  if [ -f "$CRX_FILE" ]; then
+                      aws s3 cp "$CRX_FILE" "s3://${{ secrets.AWS_S3_BUCKET }}/extensions/content-blocker/content-blocker-extension-${VERSION}.crx"
+                      echo "Uploaded CRX file to S3"
+                  else
+                      echo "CRX file not found, skipping S3 upload"
+                  fi
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_DEFAULT_REGION: us-east-1
+
             - name: Create GitHub Release
               if: steps.check-release.outputs.exists == 'false'
               run: |
