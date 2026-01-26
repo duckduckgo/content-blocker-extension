@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "DuckDuckGo Content Blocker Extension",
-    "version": "2026.1.22",
+    "version": "2026.1.23",
     "minimum_chrome_version": "122.0",
     "permissions": ["scripting"],
     "host_permissions": [
@@ -28,6 +28,13 @@
             "js": ["scriptlets/main/ublock-filters.js"],
             "all_frames": true,
             "match_origin_as_fallback": true,
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": ["https://privacy-test-pages.site/"],
+            "js": ["test-flag.js"],
+            "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         }
