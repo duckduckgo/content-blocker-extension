@@ -789,7 +789,7 @@ removeNodeText
 const $scriptletArgs$ = [
   "script",
   "(function serverContract()",
-  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;document.addEventListener(\"DOMContentLoaded\",(function(){const t=()=>{const t=document.getElementById(\"movie_player\");if(!t)return;if(!t.getStatsForNerds?.()?.debug_info?.startsWith?.(\"SSAP, AD\"))return;const e=t.getProgressState?.();e&&e.duration>0&&(e.loaded<e.duration||e.duration-e.current>1)&&t.seekTo?.(e.duration)};t(),new MutationObserver((()=>{t()})).observe(document,{childList:!0,subtree:!0})}));const t={apply:(t,e,o)=>{const n=o[0];return\"function\"==typeof n&&n.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(t,e,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,t)})();(function serverContract()",
+  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;document.addEventListener(\"DOMContentLoaded\",(function(){let e=\"\";const t=()=>{const t=document.getElementById(\"movie_player\");if(!t)return;const o=t.getProgressState?.();if(o&&o.duration>0&&(o.loaded<o.duration||o.duration-o.current>1)){if(!t.getStatsForNerds?.()?.debug_info?.startsWith?.(\"SSAP, AD\")){const o=t.getPlayerResponse?.(),r=o.videoDetails?.videoId;return void(\"UNPLAYABLE\"!==o?.playabilityStatus?.status||!o?.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.subreason||o?.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.playerCaptchaViewModel||e&&e===r||(e=r,t.loadVideoById(r,o.playerConfig?.playbackStartConfig?.startSeconds??0)))}t.seekTo?.(o.duration)}};t(),new MutationObserver((()=>{t()})).observe(document,{childList:!0,subtree:!0})}));const e={apply:(e,t,o)=>{const r=o[0];return\"function\"==typeof r&&r.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(e,t,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,e)})();(function serverContract()",
   "sedCount",
   "1",
   "window,\"fetch\""
@@ -797,7 +797,7 @@ const $scriptletArgs$ = [
 
 const $scriptletArglists$ = "0,0,1,2,3,4;1,0,5";
 
-const $scriptletArglistRefs$ = "-39;0,1";
+const $scriptletArglistRefs$ = "-41;0,1";
 
 const $scriptletHostnames$ = [
   "youtube.com",
