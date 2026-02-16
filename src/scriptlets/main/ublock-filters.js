@@ -1667,6 +1667,33 @@ function preventFetchFn(
     });
 }
 
+function preventSetTimeout(
+    needleRaw = '',
+    delayRaw = ''
+) {
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('prevent-setTimeout', needleRaw, delayRaw);
+    const needleNot = needleRaw.charAt(0) === '!';
+    const reNeedle = safe.patternToRegex(needleNot ? needleRaw.slice(1) : needleRaw);
+    const range = new RangeParser(delayRaw);
+    proxyApplyFn('setTimeout', function(context) {
+        const { callArgs } = context;
+        const a = callArgs[0] instanceof Function
+            ? safe.String(safe.Function_toString(callArgs[0]))
+            : safe.String(callArgs[0]);
+        const b = callArgs[1];
+        if ( needleRaw === '' && range.unbound() ) {
+            safe.uboLog(logPrefix, `Called:\n${a}\n${b}`);
+            return context.reflect();
+        }
+        if ( reNeedle.test(a) !== needleNot && range.test(b) ) {
+            callArgs[0] = function(){};
+            safe.uboLog(logPrefix, `Prevented:\n${a}\n${b}`);
+        }
+        return context.reflect();
+    });
+}
+
 function preventXhrFn(
     trusted = false,
     propsToMatch = '',
@@ -1929,6 +1956,78 @@ function proxyApplyFn(
     const proxiedTarget = new Proxy(fn, proxyDetails);
     proxyApplyFn.proxies.set(proxiedTarget, fn);
     context[prop] = proxiedTarget;
+}
+
+function removeAttr(
+    rawToken = '',
+    rawSelector = '',
+    behavior = ''
+) {
+    if ( typeof rawToken !== 'string' ) { return; }
+    if ( rawToken === '' ) { return; }
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('remove-attr', rawToken, rawSelector, behavior);
+    const tokens = safe.String_split.call(rawToken, /\s*\|\s*/);
+    const selector = tokens
+        .map(a => `${rawSelector}[${CSS.escape(a)}]`)
+        .join(',');
+    if ( safe.logLevel > 1 ) {
+        safe.uboLog(logPrefix, `Target selector:\n\t${selector}`);
+    }
+    const asap = /\basap\b/.test(behavior);
+    let timerId;
+    const rmattrAsync = ( ) => {
+        if ( timerId !== undefined ) { return; }
+        timerId = safe.onIdle(( ) => {
+            timerId = undefined;
+            rmattr();
+        }, { timeout: 17 });
+    };
+    const rmattr = ( ) => {
+        if ( timerId !== undefined ) {
+            safe.offIdle(timerId);
+            timerId = undefined;
+        }
+        try {
+            const nodes = document.querySelectorAll(selector);
+            for ( const node of nodes ) {
+                for ( const attr of tokens ) {
+                    if ( node.hasAttribute(attr) === false ) { continue; }
+                    node.removeAttribute(attr);
+                    safe.uboLog(logPrefix, `Removed attribute '${attr}'`);
+                }
+            }
+        } catch {
+        }
+    };
+    const mutationHandler = mutations => {
+        if ( timerId !== undefined ) { return; }
+        let skip = true;
+        for ( let i = 0; i < mutations.length && skip; i++ ) {
+            const { type, addedNodes, removedNodes } = mutations[i];
+            if ( type === 'attributes' ) { skip = false; }
+            for ( let j = 0; j < addedNodes.length && skip; j++ ) {
+                if ( addedNodes[j].nodeType === 1 ) { skip = false; break; }
+            }
+            for ( let j = 0; j < removedNodes.length && skip; j++ ) {
+                if ( removedNodes[j].nodeType === 1 ) { skip = false; break; }
+            }
+        }
+        if ( skip ) { return; }
+        asap ? rmattr() : rmattrAsync();
+    };
+    const start = ( ) => {
+        rmattr();
+        if ( /\bstay\b/.test(behavior) === false ) { return; }
+        const observer = new MutationObserver(mutationHandler);
+        observer.observe(document, {
+            attributes: true,
+            attributeFilter: tokens,
+            childList: true,
+            subtree: true,
+        });
+    };
+    runAt(( ) => { start(); }, safe.String_split.call(behavior, /\s+/));
 }
 
 function replaceFetchResponseFn(
@@ -2387,10 +2486,6 @@ function trustedEditInboundObject(propChain = '', argPos = '', jsonq = '') {
     editInboundObjectFn(true, propChain, argPos, jsonq);
 }
 
-function trustedJsonEditFetchRequest(jsonq = '', ...args) {
-    jsonEditFetchRequestFn(true, jsonq, ...args);
-}
-
 function trustedPreventDomBypass(
     methodPath = '',
     targetProp = ''
@@ -2703,29 +2798,35 @@ const scriptletGlobals = {}; // eslint-disable-line
 
 const $scriptletFunctions$ = [
 trustedEditInboundObject,
-trustedJsonEditFetchRequest,
+setConstant,
+removeAttr,
+preventSetTimeout,
 adjustSetTimeout,
 jsonPruneFetchResponse,
 jsonPruneXhrResponse,
 trustedReplaceXhrResponse,
 trustedReplaceFetchResponse,
 trustedPreventDomBypass,
-jsonPrune,
-,
-setConstant
+jsonPrune
 ];
 
 const $scriptletArgs$ = [
   "JSON.stringify",
   "0",
-  "..client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
-  "propsToMatch",
-  "/\\/(player|get_watch)/",
+  "[?..playbackContext.contentPlaybackContext][?!.attestationRequest][?!.captionsRequested][?!.settingItemIds][?!..mainAppWebInfo.graftUrl*=\"&list=\"][?!..mainAppWebInfo.graftUrl*=\"/shorts/\"]..client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
+  "ytcfg.data_.EXPERIMENT_FLAGS.web_streaming_watch",
+  "false",
+  "player-unavailable",
+  "#page-manager:has(#player-error-message-container) ytd-watch-flexy[player-unavailable]",
+  "asap stay",
+  "(),a,b);",
+  "5000",
   "[native code]",
   "17000",
   "0.001",
   "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots",
   "",
+  "propsToMatch",
   "/player?",
   "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots",
   "/playlist?",
@@ -2745,7 +2846,6 @@ const $scriptletArgs$ = [
   "JSON.parse",
   "entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "/get_watch?",
-  "",
   "",
   "",
   "",
@@ -3112,7 +3212,6 @@ const $scriptletArgs$ = [
   "",
   "",
   "",
-  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -3122,9 +3221,9 @@ const $scriptletArgs$ = [
   "url:/reel_watch_sequence?"
 ];
 
-const $scriptletArglists$ = "0,0,1,2;1,2,3,4;2,5,6,7;3,8,9,3,10;3,11,9,3,12;4,8,9,3,13;5,14,15,16;5,17,9,16;5,18,19,13;6,14,15,20;6,21,15,20;6,21,15,22;7,23,24;7,23,25;7,23,26;8,27;6,21,15,28;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;10,397,41;10,398,41;10,399,41;10,400,41;8,401;3,402,9,3,403";
+const $scriptletArglists$ = "0,0,1,2;1,3,4;2,5,6,7;3,8,9;4,10,11,12;5,13,14,15,16;5,17,14,15,18;6,13,14,15,19;7,20,21,22;7,23,14,22;7,24,25,19;8,20,21,26;8,27,21,26;8,27,21,28;9,29,30;9,29,31;9,29,32;10,33;8,27,21,34;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,401,46;1,402,46;1,403,46;1,404,46;10,405;5,406,14,15,407";
 
-const $scriptletArglistRefs$ = "15,-27,-1540;15,319,320,321,322,323,324;6,15,319,320,321,322,324;0,1,2,3,4,5,7,8,9,10,11,12,13,14,15,16,319,320,321,322,324;15,319,320,321,322,323,324";
+const $scriptletArglistRefs$ = "17,-29,-1541;17,319,320,321,322,323,324;8,17,319,320,321,322,324;0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16,17,18,319,320,321,322,324;17,319,320,321,322,323,324";
 
 const $scriptletHostnames$ = [
   "youtube.com",
