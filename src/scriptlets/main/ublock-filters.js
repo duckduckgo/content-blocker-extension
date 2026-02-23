@@ -2813,11 +2813,11 @@ jsonPrune
 const $scriptletArgs$ = [
   "JSON.stringify",
   "0",
-  "[?..playbackContext.contentPlaybackContext][?!.attestationRequest][?!.captionsRequested][?!.settingItemIds][?!..mainAppWebInfo.graftUrl*=\"&list=\"][?!..mainAppWebInfo.graftUrl*=\"/shorts/\"]..client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
+  "[?..playbackContext.contentPlaybackContext][?!.attestationRequest][?!.captionsRequested][?!.settingItemIds][?!.params^=\"YAHIAQ\"][?!..mainAppWebInfo.graftUrl*=\"&list=\"][?!..mainAppWebInfo.graftUrl*=\"/shorts/\"][?!..userAgent*=\"premium\"]..client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
   "ytcfg.data_.EXPERIMENT_FLAGS.web_streaming_watch",
   "false",
   "player-unavailable",
-  "#page-manager:has(#player-error-message-container) ytd-watch-flexy[player-unavailable]",
+  "#page-manager:has(#player-error-message-container #subreason a.yt-simple-endpoint[href=\"https://support.google.com/youtube/answer/3037019\"]) ytd-watch-flexy[player-unavailable]",
   "asap stay",
   "(),a,b);",
   "5000",
@@ -3212,6 +3212,7 @@ const $scriptletArgs$ = [
   "",
   "",
   "",
+  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -3221,9 +3222,9 @@ const $scriptletArgs$ = [
   "url:/reel_watch_sequence?"
 ];
 
-const $scriptletArglists$ = "0,0,1,2;1,3,4;2,5,6,7;3,8,9;4,10,11,12;5,13,14,15,16;5,17,14,15,18;6,13,14,15,19;7,20,21,22;7,23,14,22;7,24,25,19;8,20,21,26;8,27,21,26;8,27,21,28;9,29,30;9,29,31;9,29,32;10,33;8,27,21,34;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,401,46;1,402,46;1,403,46;1,404,46;10,405;5,406,14,15,407";
+const $scriptletArglists$ = "0,0,1,2;1,3,4;2,5,6,7;3,8,9;4,10,11,12;5,13,14,15,16;5,17,14,15,18;6,13,14,15,19;7,20,21,22;7,23,14,22;7,24,25,19;8,20,21,26;8,27,21,26;8,27,21,28;9,29,30;9,29,31;9,29,32;10,33;8,27,21,34;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,402,46;1,403,46;1,404,46;1,405,46;10,406;5,407,14,15,408";
 
-const $scriptletArglistRefs$ = "17,-29,-1541;17,319,320,321,322,323,324;8,17,319,320,321,322,324;0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16,17,18,319,320,321,322,324;17,319,320,321,322,323,324";
+const $scriptletArglistRefs$ = "17,-29,-1543;17,322,323,324,325,326,327;8,17,322,323,324,325,327;0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16,17,18,322,323,324,325,327;17,322,323,324,325,326,327";
 
 const $scriptletHostnames$ = [
   "youtube.com",
