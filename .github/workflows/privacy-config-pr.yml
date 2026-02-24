@@ -28,13 +28,20 @@ jobs:
                   path: privacy-configuration/
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
 
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+
             - name: Update extension URL in windows-override.json
               run: |
                   cd privacy-configuration
+                  npm ci
                   jq --arg url "$EXTENSION_URL" \
                     '.features.adBlockV2Extension.settings.extensionUrl = $url' \
                     overrides/windows-override.json > overrides/windows-override.json.tmp
                   mv overrides/windows-override.json.tmp overrides/windows-override.json
+                  npm run lint-fix
               env:
                   EXTENSION_URL: https://staticcdn.duckduckgo.com/extensions/content-blocker/content-blocker-extension-${{ inputs.extension_version }}.crx
 
@@ -49,4 +56,8 @@ jobs:
                   title: 'Update content-blocker extension to ${{ inputs.extension_version }}'
                   body: |
                       Update content-blocker extension to ${{ inputs.extension_version }}.
+                  reviewers: |
+                      sammacbeth
+                      dharb
+                      RendijsSmukulis
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
