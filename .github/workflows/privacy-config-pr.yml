@@ -1,0 +1,52 @@
+# Creates a PR on duckduckgo/privacy-configuration to update the content-blocker
+# extension URL to the given version. Requires PRIVACY_CONFIG_PAT secret with
+# permission to create branches and open PRs in that repo.
+
+name: Create privacy-config PR for extension version
+
+on:
+    workflow_dispatch:
+        inputs:
+            extension_version:
+                description: 'Extension version to set (e.g. 2026.2.23)'
+                required: true
+    workflow_call:
+        inputs:
+            extension_version:
+                type: string
+                description: 'Extension version to set'
+                required: true
+
+jobs:
+    privacy-config-pr:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout privacy-configuration
+              uses: actions/checkout@v4
+              with:
+                  repository: duckduckgo/privacy-configuration
+                  path: privacy-configuration/
+                  token: ${{ secrets.PRIVACY_CONFIG_PAT }}
+
+            - name: Update extension URL in windows-override.json
+              run: |
+                  cd privacy-configuration
+                  jq --arg url "$EXTENSION_URL" \
+                    '.features.adBlockV2Extension.settings.extensionUrl = $url' \
+                    overrides/windows-override.json > overrides/windows-override.json.tmp
+                  mv overrides/windows-override.json.tmp overrides/windows-override.json
+              env:
+                  EXTENSION_URL: https://staticcdn.duckduckgo.com/extensions/content-blocker/content-blocker-extension-${{ inputs.extension_version }}.crx
+
+            - name: Create config PR
+              uses: peter-evans/create-pull-request@v7
+              with:
+                  path: privacy-configuration/
+                  add-paths: |
+                      overrides/windows-override.json
+                  commit-message: 'Update content-blocker extension to ${{ inputs.extension_version }}'
+                  branch: 'update-content-blocker-extension-${{ inputs.extension_version }}'
+                  title: 'Update content-blocker extension to ${{ inputs.extension_version }}'
+                  body: |
+                      Update content-blocker extension to ${{ inputs.extension_version }}.
+                  token: ${{ secrets.PRIVACY_CONFIG_PAT }}

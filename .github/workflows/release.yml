@@ -98,3 +98,10 @@ jobs:
                       "${ARTIFACTS[@]}"
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Trigger privacy-config PR workflow
+              if: steps.check-release.outputs.exists == 'false'
+              run: |
+                  gh workflow run privacy-config-pr.yml -f extension_version="${{ steps.version.outputs.version }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
