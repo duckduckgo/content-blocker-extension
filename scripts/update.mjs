@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { pruneScriptlet } from './prune-scriptlet.mjs';
 
-const includeLists = ['ublock-filters'];
+const includeLists = ['ublock-filters' /* , 'ublock-experimental' */];
 const includeHosts = ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
@@ -13,13 +13,14 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
     const scriptletDetails = await (await fetch(`${uBOLBaseURL}/scriptlet-details.json`)).json();
     console.log(` - Available filter lists: ${scriptletDetails.map((pair) => pair[0]).join(', ')}`);
     console.log(` - Selected filter lists: ${includeLists.join(', ')}`);
+    const contentScripts = [];
     for (const [list, scriptlets] of scriptletDetails) {
         if (!includeLists.includes(list)) {
             continue;
         }
-        const contentScripts = [];
+
         for (const context of Object.keys(scriptlets)) {
-            if (scriptlets[context][0] !== '*') {
+            if (scriptlets[context][0] !== '*' && scriptlets[context][0] !== 'www.youtube.com') {
                 console.warn(`Skipping scriptlet ${list} for context ${context}: only wildcard is supported`);
                 continue;
             }
@@ -39,15 +40,15 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
                 world: context,
             });
         }
-        const manifest = JSON.parse(fs.readFileSync(`src/manifest.json`, 'utf8'));
-        manifest.content_scripts = contentScripts;
-        manifest.version = new Date()
-            .toISOString()
-            .slice(0, 10)
-            .split('-')
-            .map((v) => parseInt(v, 10))
-            .join('.');
-        fs.writeFileSync(`src/manifest.json`, JSON.stringify(manifest, null, 4));
-        console.log(`[Updated manifest.json with ${contentScripts.length} content scripts]`);
     }
+    const manifest = JSON.parse(fs.readFileSync(`src/manifest.json`, 'utf8'));
+    manifest.content_scripts = contentScripts;
+    manifest.version = new Date()
+        .toISOString()
+        .slice(0, 10)
+        .split('-')
+        .map((v) => parseInt(v, 10))
+        .join('.');
+    fs.writeFileSync(`src/manifest.json`, JSON.stringify(manifest, null, 4));
+    console.log(`[Updated manifest.json with ${contentScripts.length} content scripts]`);
 })();
