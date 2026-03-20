@@ -13,6 +13,9 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: write
+        outputs:
+            release_created: ${{ steps.check-release.outputs.exists == 'false' }}
+            version: ${{ steps.version.outputs.version }}
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -99,9 +102,10 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Trigger privacy-config PR workflow
-              if: steps.check-release.outputs.exists == 'false'
-              run: |
-                  gh workflow run privacy-config-pr.yml -f extension_version="${{ steps.version.outputs.version }}"
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    privacy-config-pr:
+        needs: release
+        if: needs.release.outputs.release_created == 'true'
+        uses: ./.github/workflows/privacy-config-pr.yml
+        with:
+            extension_version: ${{ needs.release.outputs.version }}
+        secrets: inherit
