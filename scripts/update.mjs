@@ -1,7 +1,8 @@
 import fs from 'fs';
 import { pruneScriptlet } from './prune-scriptlet.mjs';
 
-const includeLists = ['ublock-filters' /* , 'ublock-experimental' */];
+const includeExperimentalScriptlets = false;
+const includeLists = ['ublock-filters', 'ublock-experimental'];
 const includeHosts = ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
@@ -27,10 +28,14 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
             const scriptletName = `${context.toLowerCase()}/${list}.js`;
             console.log(`[Fetch ${scriptletName}]`);
             fs.mkdirSync(`src/rulesets/scripting/scriptlet/${context.toLowerCase()}`, { recursive: true });
-            fs.writeFileSync(
-                `src/scriptlets/${scriptletName}`,
-                pruneScriptlet(await (await fetch(`${uBOLBaseURL}/scripting/scriptlet/${scriptletName}`)).text(), includeHosts),
-            );
+            if (list !== 'ublock-experimental' || includeExperimentalScriptlets) {
+                fs.writeFileSync(
+                    `src/scriptlets/${scriptletName}`,
+                    pruneScriptlet(await (await fetch(`${uBOLBaseURL}/scripting/scriptlet/${scriptletName}`)).text(), includeHosts),
+                );
+            } else {
+                fs.writeFileSync(`src/scriptlets/${scriptletName}`, '');
+            }
             contentScripts.push({
                 matches: ['<all_urls>'],
                 js: [`scriptlets/${scriptletName}`],
