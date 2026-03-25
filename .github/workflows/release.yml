@@ -91,6 +91,9 @@ jobs:
                   if [ -f "./dist/content-blocker-extension-${VERSION}.crx" ]; then
                       ARTIFACTS+=("./dist/content-blocker-extension-${VERSION}.crx")
                   fi
+                  if [ -f "./dist/content-blocker-extension-apple-${VERSION}.zip" ]; then
+                      ARTIFACTS+=("./dist/content-blocker-extension-apple-${VERSION}.zip")
+                  fi
                   if [ ${#ARTIFACTS[@]} -eq 0 ]; then
                       echo "No artifacts found in dist directory"
                       exit 1
