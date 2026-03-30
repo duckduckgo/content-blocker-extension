@@ -1,0 +1,54 @@
+name: Publish scriptlets
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_tag:
+                description: 'Git tag to publish scriptlets from (e.g. v1.2.3)'
+                required: true
+                type: string
+
+jobs:
+    publish-scriptlets:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout release tag
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.release_tag }}
+                  fetch-depth: 1
+
+            - name: Setup CRX signing key
+              run: |
+                  echo "${{ secrets.CRX_SIGNING_KEY }}" > /tmp/crx-signing-key.pem
+                  chmod 600 /tmp/crx-signing-key.pem
+
+            - name: Upload scriptlets to S3 and log SHA256withECDSA signatures
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_DEFAULT_REGION: us-east-1
+                  AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+              run: |
+                  set -euo pipefail
+                  BUCKET="${AWS_S3_BUCKET}"
+                  PREFIX="extensions/content-blocker/scriptlets"
+                  mapfile -t SCRIPTLETS < <(find src/scriptlets -type f -name '*.js' 2>/dev/null | sort)
+                  if [ ${#SCRIPTLETS[@]} -eq 0 ]; then
+                      echo "No .js files found under src/scriptlets"
+                      exit 1
+                  fi
+                  for f in "${SCRIPTLETS[@]}"; do
+                      HASH=$(sha256sum "$f" | awk '{print $1}')
+                      aws s3 cp "$f" "s3://${BUCKET}/${PREFIX}/${HASH}.js" \
+                          --acl public-read \
+                          --content-type application/javascript
+                      SIG_B64=$(openssl dgst -sha256 -sign /tmp/crx-signing-key.pem "$f" | base64 -w0)
+                      echo "scriptlet=${f} content_sha256=${HASH} sha256_with_ecdsa_base64=${SIG_B64}"
+                  done
+
+            - name: Cleanup signing key
+              if: always()
+              run: rm -f /tmp/crx-signing-key.pem
