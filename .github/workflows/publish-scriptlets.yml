@@ -21,11 +21,13 @@ jobs:
                   fetch-depth: 1
 
             - name: Setup CRX signing key
+              env:
+                  CRX_SIGNING_KEY: ${{ secrets.CRX_SIGNING_KEY }}
               run: |
-                  echo "${{ secrets.CRX_SIGNING_KEY }}" > /tmp/crx-signing-key.pem
+                  echo "$CRX_SIGNING_KEY" > /tmp/crx-signing-key.pem
                   chmod 600 /tmp/crx-signing-key.pem
 
-            - name: Upload scriptlets to S3 and log SHA256withECDSA signatures
+            - name: Upload scriptlets to S3 and log OpenSSL signatures
               env:
                   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -46,7 +48,7 @@ jobs:
                           --acl public-read \
                           --content-type application/javascript
                       SIG_B64=$(openssl dgst -sha256 -sign /tmp/crx-signing-key.pem "$f" | base64 -w0)
-                      echo "scriptlet=${f} content_sha256=${HASH} sha256_with_ecdsa_base64=${SIG_B64}"
+                      echo "scriptlet=${f} content_sha256=${HASH} sha256_signature_base64=${SIG_B64}"
                   done
 
             - name: Cleanup signing key
