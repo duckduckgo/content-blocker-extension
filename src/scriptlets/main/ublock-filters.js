@@ -902,11 +902,12 @@ function freezeElementProperty(
                 safe.uboLog(logPrefix, 'Assignment prevented');
             } else if ( current.set ) {
                 current.set.call(this, a);
+            } else {
+                current.value = a;
             }
             if ( safe.logLevel > 1 ) {
                 safe.uboLog(logPrefix, `Assigned:\n${a}`);
             }
-            current.value = a;
         },
     });
 }
