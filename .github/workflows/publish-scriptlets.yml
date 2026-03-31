@@ -20,12 +20,12 @@ jobs:
                   ref: ${{ inputs.release_tag }}
                   fetch-depth: 1
 
-            - name: Setup CRX signing key
+            - name: Setup scriptlet signing key
               env:
-                  CRX_SIGNING_KEY: ${{ secrets.CRX_SIGNING_KEY }}
+                  SCRIPTLET_SIGNING_KEY: ${{ secrets.SCRIPTLET_SIGNING_KEY }}
               run: |
-                  echo "$CRX_SIGNING_KEY" > /tmp/crx-signing-key.pem
-                  chmod 600 /tmp/crx-signing-key.pem
+                  echo "$SCRIPTLET_SIGNING_KEY" > /tmp/scriptlet-signing-key.pem
+                  chmod 600 /tmp/scriptlet-signing-key.pem
 
             - name: Upload scriptlets to S3 and log OpenSSL signatures
               env:
@@ -47,10 +47,10 @@ jobs:
                       aws s3 cp "$f" "s3://${BUCKET}/${PREFIX}/${HASH}.js" \
                           --acl public-read \
                           --content-type application/javascript
-                      SIG_B64=$(openssl dgst -sha256 -sign /tmp/crx-signing-key.pem "$f" | base64 -w0)
+                      SIG_B64=$(openssl dgst -sha256 -sign /tmp/scriptlet-signing-key.pem "$f" | base64 -w0)
                       echo "scriptlet=${f} content_sha256=${HASH} sha256_signature_base64=${SIG_B64}"
                   done
 
             - name: Cleanup signing key
               if: always()
-              run: rm -f /tmp/crx-signing-key.pem
+              run: rm -f /tmp/scriptlet-signing-key.pem
