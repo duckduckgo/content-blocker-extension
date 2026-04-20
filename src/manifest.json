@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "DuckDuckGo Content Blocker Extension",
-    "version": "2026.4.13",
+    "version": "2026.4.20",
     "minimum_chrome_version": "122.0",
     "browser_specific_settings": {
         "duckduckgo": {
@@ -23,14 +23,6 @@
     "content_scripts": [
         {
             "matches": ["<all_urls>"],
-            "js": ["scriptlets/isolated/ublock-filters.js"],
-            "all_frames": true,
-            "match_origin_as_fallback": true,
-            "run_at": "document_start",
-            "world": "ISOLATED"
-        },
-        {
-            "matches": ["<all_urls>"],
             "js": ["scriptlets/main/ublock-filters.js"],
             "all_frames": true,
             "match_origin_as_fallback": true,
@@ -39,7 +31,7 @@
         },
         {
             "matches": ["<all_urls>"],
-            "js": ["scriptlets/isolated/ublock-experimental.js"],
+            "js": ["scriptlets/isolated/ublock-filters.js"],
             "all_frames": true,
             "match_origin_as_fallback": true,
             "run_at": "document_start",
@@ -52,6 +44,14 @@
             "match_origin_as_fallback": true,
             "run_at": "document_start",
             "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["scriptlets/isolated/ublock-experimental.js"],
+            "all_frames": true,
+            "match_origin_as_fallback": true,
+            "run_at": "document_start",
+            "world": "ISOLATED"
         }
     ]
 }
