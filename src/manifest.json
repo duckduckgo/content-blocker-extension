@@ -9,7 +9,7 @@
             "appleRequiresExtraction": true
         }
     },
-    "permissions": ["scripting"],
+    "permissions": ["scripting", "declarativeNetRequest"],
     "host_permissions": [
         "https://*.youtube.com/",
         "https://youtube.com/",
@@ -19,6 +19,15 @@
     "background": {
         "service_worker": "background.js",
         "type": "module"
+    },
+    "declarative_net_request": {
+        "rule_resources": [
+            {
+                "id": "youtube",
+                "enabled": true,
+                "path": "rules/youtube.json"
+            }
+        ]
     },
     "content_scripts": [
         {
