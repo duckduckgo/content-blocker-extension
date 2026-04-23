@@ -14,11 +14,26 @@ jobs:
         permissions:
             contents: read
         steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 1
+
             - name: Checkout release tag
               uses: actions/checkout@v4
               with:
                   ref: ${{ inputs.release_tag }}
                   fetch-depth: 1
+                  path: release-tag/
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
 
             - name: Setup scriptlet signing key
               env:
@@ -33,33 +48,10 @@ jobs:
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
                   AWS_DEFAULT_REGION: us-east-1
                   AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-              run: |
-                  set -euo pipefail
-                  BUCKET="${AWS_S3_BUCKET}"
-                  PREFIX="extensions/content-blocker/scriptlets"
-                  METADATA_FILE="${RUNNER_TEMP}/scriptlets-metadata.json"
-                  echo '{}' > "$METADATA_FILE"
-                  mapfile -t SCRIPTLETS < <(find src/scriptlets -type f -name '*.js' 2>/dev/null | sort)
-                  if [ ${#SCRIPTLETS[@]} -eq 0 ]; then
-                      echo "No .js files found under src/scriptlets"
-                      exit 1
-                  fi
-                  for f in "${SCRIPTLETS[@]}"; do
-                      REL_PATH="${f#src/}"
-                      HASH=$(sha256sum "$f" | awk '{print $1}')
-                      URL="https://staticcdn.duckduckgo.com/extensions/content-blocker/scriptlets/${HASH}.js"
-                      aws s3 cp "$f" "s3://${BUCKET}/${PREFIX}/${HASH}.js" \
-                          --acl public-read \
-                          --content-type application/javascript
-                      SIG_B64=$(openssl dgst -sha256 -sign /tmp/scriptlet-signing-key.pem "$f" | base64 -w0)
-                      echo "scriptlet=${f} content_sha256=${HASH} sha256_signature_base64=${SIG_B64}"
-                      TMP_METADATA_FILE=$(mktemp)
-                      jq --arg rel "$REL_PATH" --arg url "$URL" --arg signature "$SIG_B64" \
-                          '. + {($rel): {url: $url, signature: $signature}}' \
-                          "$METADATA_FILE" > "$TMP_METADATA_FILE"
-                      mv "$TMP_METADATA_FILE" "$METADATA_FILE"
-                  done
-                  cp "$METADATA_FILE" scriptlets-metadata.json
+                  SOURCE_SCRIPTLETS_DIR: release-tag/src/scriptlets
+                  SCRIPTLET_SIGNING_KEY_PATH: /tmp/scriptlet-signing-key.pem
+                  SCRIPTLETS_METADATA_PATH: scriptlets-metadata.json
+              run: npx zx ./scripts/publish-scriptlets.mjs
 
             - name: Upload scriptlet metadata artifact
               uses: actions/upload-artifact@v4
@@ -76,6 +68,11 @@ jobs:
         runs-on: ubuntu-latest
         needs: publish-scriptlets
         steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 1
+
             - name: Checkout privacy-configuration
               uses: actions/checkout@v4
               with:
@@ -93,23 +90,16 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: '22'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
 
             - name: Update scriptlets in ad-blocking-extension.json
-              run: |
-                  set -euo pipefail
-                  SCRIPTLETS_FILE="scriptlets-metadata/scriptlets-metadata.json"
-                  if [ ! -s "$SCRIPTLETS_FILE" ]; then
-                      echo "Scriptlet metadata artifact is missing or empty"
-                      exit 1
-                  fi
-
-                  scriptlets_json=$(jq -c '.' "$SCRIPTLETS_FILE")
-                  jq --argjson scriptlets "$scriptlets_json" \
-                      '.settings.scriptlets = ((.settings.scriptlets // {}) + $scriptlets)' \
-                      privacy-configuration/features/ad-blocking-extension.json \
-                      > privacy-configuration/features/ad-blocking-extension.json.tmp
-                  mv privacy-configuration/features/ad-blocking-extension.json.tmp \
-                      privacy-configuration/features/ad-blocking-extension.json
+              env:
+                  SCRIPTLETS_METADATA_PATH: scriptlets-metadata/scriptlets-metadata.json
+                  PRIVACY_CONFIG_FILE: privacy-configuration/features/ad-blocking-extension.json
+              run: npx zx ./scripts/update-scriptlets-config.mjs
 
             - name: Lint privacy-configuration changes
               run: |
