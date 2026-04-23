@@ -54,3 +54,87 @@ jobs:
             - name: Cleanup signing key
               if: always()
               run: rm -f /tmp/scriptlet-signing-key.pem
+
+    scriptlets-config-pr:
+        runs-on: ubuntu-latest
+        needs: publish-scriptlets
+        steps:
+            - name: Checkout release tag
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.release_tag }}
+                  fetch-depth: 1
+                  path: content-blocker-extension/
+
+            - name: Setup scriptlet signing key
+              env:
+                  SCRIPTLET_SIGNING_KEY: ${{ secrets.SCRIPTLET_SIGNING_KEY }}
+              run: |
+                  echo "$SCRIPTLET_SIGNING_KEY" > /tmp/scriptlet-signing-key.pem
+                  chmod 600 /tmp/scriptlet-signing-key.pem
+
+            - name: Checkout privacy-configuration
+              uses: actions/checkout@v4
+              with:
+                  repository: duckduckgo/privacy-configuration
+                  path: privacy-configuration/
+                  token: ${{ secrets.PRIVACY_CONFIG_PAT }}
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
+
+            - name: Update scriptlets in ad-blocking-extension.json
+              run: |
+                  set -euo pipefail
+                  mapfile -t SCRIPTLETS < <(find content-blocker-extension/src/scriptlets -type f -name '*.js' | sort)
+                  if [ ${#SCRIPTLETS[@]} -eq 0 ]; then
+                      echo "No .js files found under src/scriptlets"
+                      exit 1
+                  fi
+
+                  scriptlet_entries=$(mktemp)
+                  for f in "${SCRIPTLETS[@]}"; do
+                      rel="scriptlets/${f#*src/scriptlets/}"
+                      hash=$(sha256sum "$f" | awk '{print $1}')
+                      signature=$(openssl dgst -sha256 -sign /tmp/scriptlet-signing-key.pem "$f" | base64 -w0)
+                      url="https://staticcdn.duckduckgo.com/extensions/content-blocker/scriptlets/${hash}.js"
+                      jq -cn --arg rel "$rel" --arg url "$url" --arg signature "$signature" \
+                          '{($rel): {url: $url, signature: $signature}}' >> "$scriptlet_entries"
+                  done
+
+                  scriptlets_json=$(jq -s 'add' "$scriptlet_entries")
+                  jq --argjson scriptlets "$scriptlets_json" \
+                      '.settings.scriptlets = ((.settings.scriptlets // {}) + $scriptlets)' \
+                      privacy-configuration/features/ad-blocking-extension.json \
+                      > privacy-configuration/features/ad-blocking-extension.json.tmp
+                  mv privacy-configuration/features/ad-blocking-extension.json.tmp \
+                      privacy-configuration/features/ad-blocking-extension.json
+
+            - name: Lint privacy-configuration changes
+              run: |
+                  cd privacy-configuration
+                  npm ci
+                  npm run lint-fix
+
+            - name: Create config PR
+              uses: peter-evans/create-pull-request@v7
+              with:
+                  path: privacy-configuration/
+                  add-paths: |
+                      features/ad-blocking-extension.json
+                  commit-message: 'Update ad-blocking extension scriptlets for ${{ inputs.release_tag }}'
+                  branch: 'update-ad-blocking-extension-scriptlets-${{ inputs.release_tag }}'
+                  title: 'Update ad-blocking extension scriptlets for ${{ inputs.release_tag }}'
+                  body: |
+                      Update ad-blocking extension scriptlets for ${{ inputs.release_tag }}.
+                  reviewers: |
+                      sammacbeth
+                      dharb
+                      RendijsSmukulis
+                  token: ${{ secrets.PRIVACY_CONFIG_PAT }}
+
+            - name: Cleanup signing key
+              if: always()
+              run: rm -f /tmp/scriptlet-signing-key.pem
