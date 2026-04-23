@@ -1,6 +1,7 @@
 #!/usr/bin/env zx
 
-import { createHash, createPrivateKey, sign as signWithKey } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { $ } from 'zx';
@@ -46,15 +47,31 @@ if (scriptletFiles.length === 0) {
     throw new Error(`No .js files found under ${sourceScriptletsDir}`);
 }
 
-const privateKey = createPrivateKey(await readFile(signingKeyPath, 'utf8'));
 const metadata = {};
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function signScriptlet(file) {
+    const result = spawnSync('openssl', ['dgst', '-sha256', '-sign', signingKeyPath, file], {
+        encoding: null,
+    });
+
+    if (result.status !== 0) {
+        const stderr = result.stderr ? result.stderr.toString('utf8').trim() : 'unknown openssl error';
+        throw new Error(`Failed to sign ${file}: ${stderr}`);
+    }
+
+    return Buffer.from(result.stdout).toString('base64');
+}
 
 for (const file of scriptletFiles) {
     const relativePath = path.relative(sourceScriptletsDir, file).split(path.sep).join('/');
     const scriptletKey = `scriptlets/${relativePath}`;
     const content = await readFile(file);
     const hash = createHash('sha256').update(content).digest('hex');
-    const signature = signWithKey('sha256', content, privateKey).toString('base64');
+    const signature = signScriptlet(file);
     const url = `${cdnBaseUrl}/${hash}.js`;
     const s3Url = `s3://${s3Bucket}/${s3Prefix}/${hash}.js`;
 
