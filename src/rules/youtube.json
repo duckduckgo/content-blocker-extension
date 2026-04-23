@@ -28,9 +28,7 @@
         "condition": {
             "urlFilter": "||youtube-nocookie.com/youtubei/v1/player/ad_break",
             "resourceTypes": ["xmlhttprequest"],
-            "initiatorDomains": [
-                "youtube-nocookie.com"
-            ]
+            "initiatorDomains": ["youtube-nocookie.com"]
         }
     }
 ]
