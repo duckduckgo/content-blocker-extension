@@ -48,21 +48,13 @@ if (scriptletFiles.length === 0) {
 
 const metadata = {};
 
-/**
- * @param {string} file
- * @returns {Promise<string>}
- */
-async function signScriptlet(file) {
-    const { stdout } = await $`set -o pipefail; openssl dgst -sha256 -sign ${signingKeyPath} ${file} | base64 -w0`;
-    return stdout.trim();
-}
-
 for (const file of scriptletFiles) {
     const relativePath = path.relative(sourceScriptletsDir, file).split(path.sep).join('/');
     const scriptletKey = `scriptlets/${relativePath}`;
     const content = await readFile(file);
     const hash = createHash('sha256').update(content).digest('hex');
-    const signature = await signScriptlet(file);
+    const { stdout: signatureStdout } = await $`set -o pipefail; openssl dgst -sha256 -sign ${signingKeyPath} ${file} | base64 -w0`;
+    const signature = signatureStdout.trim();
     const url = `${cdnBaseUrl}/${hash}.js`;
     const s3Url = `s3://${s3Bucket}/${s3Prefix}/${hash}.js`;
 
