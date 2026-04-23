@@ -1,6 +1,5 @@
 #!/usr/bin/env zx
 
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -51,19 +50,11 @@ const metadata = {};
 
 /**
  * @param {string} file
- * @returns {string}
+ * @returns {Promise<string>}
  */
-function signScriptlet(file) {
-    const result = spawnSync('openssl', ['dgst', '-sha256', '-sign', signingKeyPath, file], {
-        encoding: null,
-    });
-
-    if (result.status !== 0) {
-        const stderr = result.stderr ? result.stderr.toString('utf8').trim() : 'unknown openssl error';
-        throw new Error(`Failed to sign ${file}: ${stderr}`);
-    }
-
-    return Buffer.from(result.stdout).toString('base64');
+async function signScriptlet(file) {
+    const { stdout } = await $`set -o pipefail; openssl dgst -sha256 -sign ${signingKeyPath} ${file} | base64 -w0`;
+    return stdout.trim();
 }
 
 for (const file of scriptletFiles) {
@@ -71,7 +62,7 @@ for (const file of scriptletFiles) {
     const scriptletKey = `scriptlets/${relativePath}`;
     const content = await readFile(file);
     const hash = createHash('sha256').update(content).digest('hex');
-    const signature = signScriptlet(file);
+    const signature = await signScriptlet(file);
     const url = `${cdnBaseUrl}/${hash}.js`;
     const s3Url = `s3://${s3Bucket}/${s3Prefix}/${hash}.js`;
 
