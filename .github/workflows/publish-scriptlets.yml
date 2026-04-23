@@ -27,7 +27,7 @@ jobs:
                   echo "$SCRIPTLET_SIGNING_KEY" > /tmp/scriptlet-signing-key.pem
                   chmod 600 /tmp/scriptlet-signing-key.pem
 
-            - name: Upload scriptlets to S3 and log OpenSSL signatures
+            - name: Upload scriptlets to S3 and generate metadata
               env:
                   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -37,19 +37,36 @@ jobs:
                   set -euo pipefail
                   BUCKET="${AWS_S3_BUCKET}"
                   PREFIX="extensions/content-blocker/scriptlets"
+                  METADATA_FILE="${RUNNER_TEMP}/scriptlets-metadata.json"
+                  echo '{}' > "$METADATA_FILE"
                   mapfile -t SCRIPTLETS < <(find src/scriptlets -type f -name '*.js' 2>/dev/null | sort)
                   if [ ${#SCRIPTLETS[@]} -eq 0 ]; then
                       echo "No .js files found under src/scriptlets"
                       exit 1
                   fi
                   for f in "${SCRIPTLETS[@]}"; do
+                      REL_PATH="${f#src/}"
                       HASH=$(sha256sum "$f" | awk '{print $1}')
+                      URL="https://staticcdn.duckduckgo.com/extensions/content-blocker/scriptlets/${HASH}.js"
                       aws s3 cp "$f" "s3://${BUCKET}/${PREFIX}/${HASH}.js" \
                           --acl public-read \
                           --content-type application/javascript
                       SIG_B64=$(openssl dgst -sha256 -sign /tmp/scriptlet-signing-key.pem "$f" | base64 -w0)
                       echo "scriptlet=${f} content_sha256=${HASH} sha256_signature_base64=${SIG_B64}"
+                      TMP_METADATA_FILE=$(mktemp)
+                      jq --arg rel "$REL_PATH" --arg url "$URL" --arg signature "$SIG_B64" \
+                          '. + {($rel): {url: $url, signature: $signature}}' \
+                          "$METADATA_FILE" > "$TMP_METADATA_FILE"
+                      mv "$TMP_METADATA_FILE" "$METADATA_FILE"
                   done
+                  cp "$METADATA_FILE" scriptlets-metadata.json
+
+            - name: Upload scriptlet metadata artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: scriptlets-metadata
+                  path: scriptlets-metadata.json
+                  if-no-files-found: error
 
             - name: Cleanup signing key
               if: always()
@@ -59,26 +76,18 @@ jobs:
         runs-on: ubuntu-latest
         needs: publish-scriptlets
         steps:
-            - name: Checkout release tag
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ inputs.release_tag }}
-                  fetch-depth: 1
-                  path: content-blocker-extension/
-
-            - name: Setup scriptlet signing key
-              env:
-                  SCRIPTLET_SIGNING_KEY: ${{ secrets.SCRIPTLET_SIGNING_KEY }}
-              run: |
-                  echo "$SCRIPTLET_SIGNING_KEY" > /tmp/scriptlet-signing-key.pem
-                  chmod 600 /tmp/scriptlet-signing-key.pem
-
             - name: Checkout privacy-configuration
               uses: actions/checkout@v4
               with:
                   repository: duckduckgo/privacy-configuration
                   path: privacy-configuration/
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
+
+            - name: Download scriptlet metadata artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: scriptlets-metadata
+                  path: scriptlets-metadata
 
             - name: Setup Node.js
               uses: actions/setup-node@v4
@@ -88,23 +97,13 @@ jobs:
             - name: Update scriptlets in ad-blocking-extension.json
               run: |
                   set -euo pipefail
-                  mapfile -t SCRIPTLETS < <(find content-blocker-extension/src/scriptlets -type f -name '*.js' | sort)
-                  if [ ${#SCRIPTLETS[@]} -eq 0 ]; then
-                      echo "No .js files found under src/scriptlets"
+                  SCRIPTLETS_FILE="scriptlets-metadata/scriptlets-metadata.json"
+                  if [ ! -s "$SCRIPTLETS_FILE" ]; then
+                      echo "Scriptlet metadata artifact is missing or empty"
                       exit 1
                   fi
 
-                  scriptlet_entries=$(mktemp)
-                  for f in "${SCRIPTLETS[@]}"; do
-                      rel="scriptlets/${f#*src/scriptlets/}"
-                      hash=$(sha256sum "$f" | awk '{print $1}')
-                      signature=$(openssl dgst -sha256 -sign /tmp/scriptlet-signing-key.pem "$f" | base64 -w0)
-                      url="https://staticcdn.duckduckgo.com/extensions/content-blocker/scriptlets/${hash}.js"
-                      jq -cn --arg rel "$rel" --arg url "$url" --arg signature "$signature" \
-                          '{($rel): {url: $url, signature: $signature}}' >> "$scriptlet_entries"
-                  done
-
-                  scriptlets_json=$(jq -s 'add' "$scriptlet_entries")
+                  scriptlets_json=$(jq -c '.' "$SCRIPTLETS_FILE")
                   jq --argjson scriptlets "$scriptlets_json" \
                       '.settings.scriptlets = ((.settings.scriptlets // {}) + $scriptlets)' \
                       privacy-configuration/features/ad-blocking-extension.json \
@@ -134,7 +133,3 @@ jobs:
                       dharb
                       RendijsSmukulis
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
-
-            - name: Cleanup signing key
-              if: always()
-              run: rm -f /tmp/scriptlet-signing-key.pem
