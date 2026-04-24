@@ -121,5 +121,5 @@ jobs:
                   reviewers: |
                       sammacbeth
                       dharb
-                      RendijsSmukulis
+                      miasma13
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
