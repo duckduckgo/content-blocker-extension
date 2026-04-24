@@ -7,6 +7,12 @@ on:
                 description: 'Git tag to publish scriptlets from (e.g. v1.2.3)'
                 required: true
                 type: string
+    workflow_call:
+        inputs:
+            release_tag:
+                description: 'Git tag to publish scriptlets from (e.g. v1.2.3)'
+                required: true
+                type: string
 
 jobs:
     publish-scriptlets:
@@ -80,6 +86,13 @@ jobs:
                   path: privacy-configuration/
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
 
+            - name: Checkout release tag (manifest version)
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.release_tag }}
+                  fetch-depth: 1
+                  path: release-tag/
+
             - name: Download scriptlet metadata artifact
               uses: actions/download-artifact@v4
               with:
@@ -99,6 +112,7 @@ jobs:
               env:
                   SCRIPTLETS_METADATA_PATH: scriptlets-metadata/scriptlets-metadata.json
                   PRIVACY_CONFIG_FILE: privacy-configuration/features/ad-blocking-extension.json
+                  EXTENSION_MANIFEST_PATH: release-tag/src/manifest.json
               run: npx zx ./scripts/update-scriptlets-config.mjs
 
             - name: Lint privacy-configuration changes
@@ -121,5 +135,5 @@ jobs:
                   reviewers: |
                       sammacbeth
                       dharb
-                      RendijsSmukulis
+                      miasma13
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
