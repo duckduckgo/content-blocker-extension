@@ -6,29 +6,9 @@
             "type": "block"
         },
         "condition": {
-            "urlFilter": "||youtube.com/youtubei/v1/player/ad_break",
-            "resourceTypes": ["xmlhttprequest"],
-            "initiatorDomains": [
-                "youtube.com",
-                "www.youtube.com",
-                "m.youtube.com",
-                "music.youtube.com",
-                "studio.youtube.com",
-                "tv.youtube.com",
-                "kids.youtube.com"
-            ]
-        }
-    },
-    {
-        "id": 1002,
-        "priority": 1,
-        "action": {
-            "type": "block"
-        },
-        "condition": {
-            "urlFilter": "||youtube-nocookie.com/youtubei/v1/player/ad_break",
-            "resourceTypes": ["xmlhttprequest"],
-            "initiatorDomains": ["youtube-nocookie.com"]
+            "urlFilter": "/youtubei/v1/player/ad_break",
+            "requestDomains": ["youtube.com", "youtube-nocookie.com"],
+            "resourceTypes": ["xmlhttprequest"]
         }
     }
 ]
