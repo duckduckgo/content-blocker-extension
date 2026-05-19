@@ -51,4 +51,4 @@ privacyConfig.settings.scriptlets = {
 };
 
 await fs.writeJson(privacyConfigAbsolutePath, privacyConfig, { spaces: 1 });
-echo(`Updated ${privacyConfigFile}: settings.version=${extensionVersion}, ${scriptletKeys.length} scriptlet entries`);
+echo(`Updated ${privacyConfigFile}: settings.version=${extensionVersion}, ${scriptletKeys.length} entries`);
