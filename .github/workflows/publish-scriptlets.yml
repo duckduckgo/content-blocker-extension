@@ -49,15 +49,15 @@ jobs:
                   chmod 600 /tmp/scriptlet-signing-key.pem
 
             - name: Upload scriptlets to S3 and generate metadata
+              working-directory: release-tag
               env:
                   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
                   AWS_DEFAULT_REGION: us-east-1
                   AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-                  SOURCE_SCRIPTLETS_DIR: release-tag/src/scriptlets
                   SCRIPTLET_SIGNING_KEY_PATH: /tmp/scriptlet-signing-key.pem
-                  SCRIPTLETS_METADATA_PATH: scriptlets-metadata.json
-              run: npx zx ./scripts/publish-scriptlets.mjs
+                  SCRIPTLETS_METADATA_PATH: ${{ github.workspace }}/scriptlets-metadata.json
+              run: npx --prefix ${{ github.workspace }} zx ../scripts/publish-scriptlets.mjs src/scriptlets/*/*.js src/rules/*.json
 
             - name: Upload scriptlet metadata artifact
               uses: actions/upload-artifact@v4

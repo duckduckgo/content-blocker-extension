@@ -1,16 +1,21 @@
 #!/usr/bin/env zx
 
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { $ } from 'zx';
+import { $, argv } from 'zx';
 
-const sourceScriptletsDir = process.env.SOURCE_SCRIPTLETS_DIR || 'src/scriptlets';
 const signingKeyPath = process.env.SCRIPTLET_SIGNING_KEY_PATH;
 const metadataPath = process.env.SCRIPTLETS_METADATA_PATH || 'scriptlets-metadata.json';
 const s3Bucket = process.env.AWS_S3_BUCKET;
 const s3Prefix = process.env.SCRIPTLETS_S3_PREFIX || 'extensions/content-blocker/scriptlets';
 const cdnBaseUrl = process.env.SCRIPTLETS_CDN_BASE_URL || 'https://staticcdn.duckduckgo.com/extensions/content-blocker/scriptlets';
+
+/** @type {Record<string, string>} */
+const contentTypeByExtension = {
+    '.js': 'application/javascript',
+    '.json': 'application/json',
+};
 
 if (!signingKeyPath) {
     throw new Error('SCRIPTLET_SIGNING_KEY_PATH is required');
@@ -19,51 +24,74 @@ if (!s3Bucket) {
     throw new Error('AWS_S3_BUCKET is required');
 }
 
+const cwd = process.cwd();
+const sourceDirAbsolute = path.resolve(cwd, 'src');
+const sourceDirPrefix = `${sourceDirAbsolute}${path.sep}`;
+
 /**
- * @param {string} dir
+ * @param {string[]} paths
  * @returns {Promise<string[]>}
  */
-async function listScriptletFiles(dir) {
-    const entries = await readdir(dir, { withFileTypes: true });
-    const files = [];
-
-    for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            files.push(...(await listScriptletFiles(fullPath)));
-            continue;
-        }
-        if (entry.isFile() && entry.name.endsWith('.js')) {
-            files.push(fullPath);
-        }
+async function resolvePublishFiles(paths) {
+    if (paths.length === 0) {
+        throw new Error('At least one file path is required');
     }
 
-    return files;
+    const files = new Set();
+
+    for (const filePath of paths) {
+        const absolutePath = path.resolve(cwd, filePath);
+
+        try {
+            await access(absolutePath);
+        } catch {
+            throw new Error(`File not found: ${filePath}`);
+        }
+
+        if (!absolutePath.startsWith(sourceDirPrefix)) {
+            throw new Error(`File must be under src/: ${filePath}`);
+        }
+
+        files.add(absolutePath);
+    }
+
+    return [...files].sort();
 }
 
-const scriptletFiles = (await listScriptletFiles(sourceScriptletsDir)).sort();
-if (scriptletFiles.length === 0) {
-    throw new Error(`No .js files found under ${sourceScriptletsDir}`);
-}
+/**
+ * @param {string} file
+ * @returns {Promise<{ url: string, signature: string }>}
+ */
+async function publishFile(file) {
+    const extension = path.extname(file);
+    const contentType = contentTypeByExtension[extension];
+    if (!contentType) {
+        throw new Error(`Unsupported file type "${extension}" for ${file}`);
+    }
 
-const metadata = {};
-
-for (const file of scriptletFiles) {
-    const relativePath = path.relative(sourceScriptletsDir, file).split(path.sep).join('/');
-    const scriptletKey = `scriptlets/${relativePath}`;
     const content = await readFile(file);
     const hash = createHash('sha256').update(content).digest('hex');
     const { stdout: signatureStdout } = await $`set -o pipefail; openssl dgst -sha256 -sign ${signingKeyPath} ${file} | base64 -w0`;
     const signature = signatureStdout.trim();
-    const url = `${cdnBaseUrl}/${hash}.js`;
-    const s3Url = `s3://${s3Bucket}/${s3Prefix}/${hash}.js`;
+    const url = `${cdnBaseUrl}/${hash}${extension}`;
+    const s3Url = `s3://${s3Bucket}/${s3Prefix}/${hash}${extension}`;
 
-    await $`aws s3 cp ${file} ${s3Url} --acl public-read --content-type application/javascript`;
+    await $`aws s3 cp ${file} ${s3Url} --acl public-read --content-type ${contentType}`;
 
-    metadata[scriptletKey] = { url, signature };
-    console.log(`Uploaded ${scriptletKey} -> ${s3Url}`);
+    console.log(`Uploaded ${file} -> ${s3Url}`);
+    return { url, signature };
+}
+
+const publishFiles = await resolvePublishFiles(argv._);
+
+/** @type {Record<string, { url: string, signature: string }>} */
+const metadata = {};
+
+for (const file of publishFiles) {
+    const metadataKey = path.relative(sourceDirAbsolute, file).split(path.sep).join('/');
+    metadata[metadataKey] = await publishFile(file);
 }
 
 await mkdir(path.dirname(metadataPath), { recursive: true });
 await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
-console.log(`Wrote metadata for ${scriptletFiles.length} scriptlets to ${metadataPath}`);
+console.log(`Wrote metadata for ${publishFiles.length} files to ${metadataPath}`);
