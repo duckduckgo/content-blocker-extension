@@ -6,8 +6,8 @@
             "type": "block"
         },
         "condition": {
-            "urlFilter": "/youtubei/v1/player/ad_break",
-            "requestDomains": ["youtube.com", "youtube-nocookie.com"],
+            "urlFilter": "||youtube.com/youtubei/v1/player/ad_break",
+            "requestDomains": ["youtube.com"],
             "resourceTypes": ["xmlhttprequest"]
         }
     }
