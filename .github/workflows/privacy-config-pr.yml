@@ -37,9 +37,9 @@ jobs:
               run: |
                   cd privacy-configuration
                   npm ci
-                  jq --arg url "$EXTENSION_URL" \
-                    '.features.adBlockV2Extension.settings.extensionUrl = $url' \
-                    overrides/windows-override.json > overrides/windows-override.json.tmp
+                  jq -n --arg url "$EXTENSION_URL" '$url' | \
+                    node scripts/set-jsonc-path.mjs overrides/windows-override.json features.adBlockV2Extension.settings.extensionUrl \
+                    > overrides/windows-override.json.tmp
                   mv overrides/windows-override.json.tmp overrides/windows-override.json
                   npm run lint-fix
               env:
