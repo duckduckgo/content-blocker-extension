@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "DuckDuckGo Content Blocker Extension",
-    "version": "2026.6.14",
+    "version": "2026.6.21",
     "minimum_chrome_version": "122.0",
     "browser_specific_settings": {
         "duckduckgo": {
