@@ -890,7 +890,7 @@ const $scriptletArgs$ = [
 
 const $scriptletArglists$ = "0,0,1,2,3,4;1,0,5";
 
-const $scriptletArglistRefs$ = "-51;0,1";
+const $scriptletArglistRefs$ = "-52;0,1";
 
 const $scriptletHostnames$ = [
   "youtube.com",
