@@ -2,6 +2,41 @@ import { VM } from 'vm2';
 
 const sectionSeparator = '/******************************************************************************/';
 
+const SCRIPTLET_CONST_NAMES = [
+    '$scriptletHostnames$',
+    '$scriptletArglistRefs$',
+    '$scriptletArglists$',
+    '$scriptletArgs$',
+    '$scriptletFunctions$',
+    '$scriptletFromRegexes$',
+];
+
+/**
+ * Locate `const $name$ = ...;` in source and return its span and text.
+ * Upstream emits these as a single line, except `$scriptletFunctions$` which
+ * puts the identifier list on the following line after the size comment.
+ * @param {string} source
+ * @param {string} name
+ * @returns {{ start: number, end: number, text: string } | null}
+ */
+function findConstDeclaration(source, name) {
+    const marker = `const ${name} =`;
+    const start = source.indexOf(marker);
+    if (start === -1) {
+        return null;
+    }
+    let end = source.indexOf('\n', start);
+    if (end === -1) {
+        end = source.length;
+    }
+    // `$scriptletFunctions$` is split across two lines: `= /* N */` then `[...]`.
+    if (!source.slice(start, end).includes(';')) {
+        const nextEnd = source.indexOf('\n', end + 1);
+        end = nextEnd === -1 ? source.length : nextEnd;
+    }
+    return { start, end, text: source.slice(start, end) };
+}
+
 /**
  * Prune a scriptlet to only include hosts in the includeHosts list.
  * @param {string} scriptlet contents
@@ -10,11 +45,17 @@ const sectionSeparator = '/*****************************************************
  */
 export function pruneScriptlet(scriptlet, includeHosts) {
     const scriptletSections = scriptlet.split(sectionSeparator);
-    const [header, functions, vars, execute, footer] = scriptletSections;
+    const [header, functions, , execute, footer] = scriptletSections;
 
+    // Embedded consts live in the execute section now; lift them to top-level for the VM.
+    const decls = Object.fromEntries(SCRIPTLET_CONST_NAMES.map((name) => [name, findConstDeclaration(execute, name)]));
     const vm = new VM();
     vm.run(functions);
-    vm.run(vars);
+    vm.run(
+        SCRIPTLET_CONST_NAMES.filter((name) => decls[name])
+            .map((name) => decls[name].text)
+            .join('\n'),
+    );
     const scriptletFunctions = vm.run('Array.isArray($scriptletFunctions$) ? $scriptletFunctions$.map(f => f.name) : []');
     const fullScriptletFunctions = vm.run('Array.isArray($scriptletFunctions$) ? $scriptletFunctions$ : []');
     const scriptletArgs = vm.run(
@@ -64,24 +105,11 @@ export function pruneScriptlet(scriptlet, includeHosts) {
         .slice(0, Math.max(...functionIndices) + 1)
         .map((v, i) => (functionIndices.has(i) ? v : ''));
 
-    const newVars = `
+    const newFlags = `
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = [
-${newScriptletFunctions.join(',\n')}
-];
-
-const $scriptletArgs$ = ${JSON.stringify(newScriptletArgs, null, 2)};
-
-const $scriptletArglists$ = "${newScriptletArglists}";
-
-const $scriptletArglistRefs$ = "${newScriptletArglistRefs}";
-
-const $scriptletHostnames$ = ${JSON.stringify(newScriptletHostnames, null, 2)};
-
-const $scriptletFromRegexes$ = [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = true;
 const $hasRegexes$ = false;
@@ -97,11 +125,43 @@ const $hasRegexes$ = false;
             return acc;
         }, functions);
 
+    // Rewrite pruned values into the execute-section consts (they are no longer top-level vars).
+    const replacements = [
+        [
+            decls.$scriptletFunctions$,
+            `const $scriptletFunctions$ = /* ${newScriptletFunctions.filter(Boolean).length} */\n[${newScriptletFunctions.join(',')}];`,
+        ],
+        [
+            decls.$scriptletArgs$,
+            `const $scriptletArgs$ = /* ${newScriptletArgs.filter(Boolean).length} */ ${JSON.stringify(newScriptletArgs, null, 2)};`,
+        ],
+        [
+            decls.$scriptletArglists$,
+            `const $scriptletArglists$ = /* ${newScriptletArglists.split(';').filter(Boolean).length} */ ${JSON.stringify(newScriptletArglists)};`,
+        ],
+        [
+            decls.$scriptletArglistRefs$,
+            `const $scriptletArglistRefs$ = /* ${newScriptletHostnames.length} */ ${JSON.stringify(newScriptletArglistRefs)};`,
+        ],
+        [
+            decls.$scriptletHostnames$,
+            `const $scriptletHostnames$ = /* ${newScriptletHostnames.length} */ ${JSON.stringify(newScriptletHostnames, null, 2)};`,
+        ],
+    ];
+    if (decls.$scriptletFromRegexes$) {
+        replacements.push([decls.$scriptletFromRegexes$, 'const $scriptletFromRegexes$ = /* 0 */ [];']);
+    }
+    let newExecute = execute;
+    replacements.sort((a, b) => b[0].start - a[0].start);
+    for (const [location, text] of replacements) {
+        newExecute = `${newExecute.slice(0, location.start)}${text}${newExecute.slice(location.end)}`;
+    }
+
     // Update copyright header
     const headerLines = header.split('\n');
     headerLines.splice(1, 0, [
         `    Copyright (C) 2026 Duck Duck Go, Inc.
     Modified from the original source:`,
     ]);
-    return [headerLines.join('\n'), newFunctions, newVars, execute, footer].join(sectionSeparator);
+    return [headerLines.join('\n'), newFunctions, newFlags, newExecute, footer].join(sectionSeparator);
 }
