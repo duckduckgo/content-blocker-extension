@@ -387,8 +387,8 @@ function runAtHtmlElementFn(fn) {
 }
 
 function safeSelf() {
-    if ( scriptletGlobals.safeSelf ) {
-        return scriptletGlobals.safeSelf;
+    if ( safeSelf.safe ) {
+        return safeSelf.safe;
     }
     const self = globalThis;
     const safe = {
@@ -507,7 +507,7 @@ function safeSelf() {
             return this.Object_fromEntries(entries);
         },
     };
-    scriptletGlobals.safeSelf = safe;
+    safeSelf.safe = safe;
     if ( scriptletGlobals.bcSecret === undefined ) { return safe; }
     // This is executed only when the logger is opened
     safe.logLevel = scriptletGlobals.logLevel || 1;
@@ -873,31 +873,7 @@ function urlSkip(url, blocked, steps) {
 
 const scriptletGlobals = {}; // eslint-disable-line
 
-const $scriptletFunctions$ = [
-replaceNodeText,
-removeNodeText
-];
-
-const $scriptletArgs$ = [
-  "script",
-  "(function serverContract()",
-  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;const e=ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent,t=t=>{ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent=t?e.replace?.(/(Mozilla\\/5\\.0 \\([^)]+)/,\"$1; \"+t):e},o=[\"channel\",\"lactmilli\"];let r=!1,n=o;document.addEventListener(\"DOMContentLoaded\",(function(){const e=()=>{const e=document.getElementById(\"movie_player\");if(!e||!window.location.href.includes(\"/watch?\"))return void(n=o);const a=e.getPlayerResponse?.(),s=e.getProgressState?.(),i=e.getStatsForNerds?.();if(s&&s.duration>0&&(s.loaded<s.duration||s.duration-s.current>1)||a?.videoDetails?.isLive){if(!i?.debug_info?.startsWith?.(\"SSAP, AD\")){const o=a.videoDetails?.videoId,s=a.playerConfig?.playbackStartConfig?.startSeconds??0,l=e.getPlayerStateObject?.()?.isBuffering,c=JSON.stringify(a.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.subreason?.runs);return void(\"UNPLAYABLE\"===a?.playabilityStatus?.status&&!a?.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.playerCaptchaViewModel&&c?.includes?.(\"WEB_PAGE_TYPE_UNKNOWN\")&&c?.includes?.(\"https://support.google.com/youtube/answer/3037019\")?(n=n.slice(1),n.length>0?t(n[0]):t(\"\"),r=!1,e.loadVideoById(o,s)):0===n.length?(r=!1,t(\"\")):l&&\"0.00 s\"===i?.buffer_health_seconds&&\"0x0\"===i?.resolution&&r&&(t(n[0]),r=!1,e.loadVideoById(o,s)))}s.duration>0&&e.seekTo?.(s.duration)}};e(),new MutationObserver((()=>{e()})).observe(document,{childList:!0,subtree:!0})})),window.Map.prototype.has=new Proxy(window.Map.prototype.has,{apply:(e,t,o)=>{if(\"onSnackbarMessage\"===o?.[0]&&!r){const a=document.getElementById(\"movie_player\");if(!a)return Reflect.apply(e,t,o);const s=a.getStatsForNerds?.(),i=a.getPlayerStateObject?.()?.isBuffering,l=a.getPlayerResponse?.()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl;i&&\"0.00 s\"===s?.buffer_health_seconds&&\"0x0\"===s?.resolution&&n.length>0&&(l.includes(\"reloadxhr\")&&(n=n.slice(1)),r=!0)}return Reflect.apply(e,t,o)}});const a={apply:(e,t,o)=>{const r=o[0];return\"function\"==typeof r&&r.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(e,t,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,a)})();(function serverContract()",
-  "sedCount",
-  "1",
-  "window,\"fetch\""
-];
-
-const $scriptletArglists$ = "0,0,1,2,3,4;1,0,5";
-
-const $scriptletArglistRefs$ = "-54;0,1";
-
-const $scriptletHostnames$ = [
-  "youtube.com",
-  "www.youtube.com"
-];
-
-const $scriptletFromRegexes$ = [];
-
+const $hasHostnames$ = true;
 const $hasEntities$ = true;
 const $hasAncestors$ = true;
 const $hasRegexes$ = false;
@@ -946,7 +922,11 @@ const entries = (( ) => {
 if ( entries.length === 0 ) { return; }
 
 const todoIndices = new Set();
-if ( $scriptletHostnames$.length ) {
+if ( $hasHostnames$ ) {
+    const $scriptletHostnames$ = /* 2 */ [
+  "youtube.com",
+  "www.youtube.com"
+];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -988,12 +968,12 @@ if ( $scriptletHostnames$.length ) {
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
-    $scriptletHostnames$.length = 0;
 }
 
 // Collect arglist references
 const todo = new Set();
 if ( todoIndices.size !== 0 ) {
+    const $scriptletArglistRefs$ = /* 2 */ "-56;0,1";
     const arglistRefs = $scriptletArglistRefs$.split(';');
     for ( const i of todoIndices ) {
         for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -1002,6 +982,7 @@ if ( todoIndices.size !== 0 ) {
     }
 }
 if ( $hasRegexes$ ) {
+    const $scriptletFromRegexes$ = /* 0 */ [];
     const { hns } = entries[0];
     for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
         const needle = $scriptletFromRegexes$[i+0];
@@ -1022,6 +1003,17 @@ if ( todo.size === 0 ) { return; }
 
 // Execute scriplets
 {
+    const $scriptletFunctions$ = /* 2 */
+[replaceNodeText,removeNodeText];
+    const $scriptletArgs$ = /* 6 */ [
+  "script",
+  "(function serverContract()",
+  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;const e=ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent,t=t=>{ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent=t?e.replace?.(/(Mozilla\\/5\\.0 \\([^)]+)/,\"$1; \"+t):e},o=[\"channel\",\"lactmilli\"];let r=!1,n=o;document.addEventListener(\"DOMContentLoaded\",(function(){const e=()=>{const e=document.getElementById(\"movie_player\");if(!e||!window.location.href.includes(\"/watch?\"))return void(n=o);const a=e.getPlayerResponse?.(),s=e.getProgressState?.(),i=e.getStatsForNerds?.();if(s&&s.duration>0&&(s.loaded<s.duration||s.duration-s.current>1)||a?.videoDetails?.isLive){if(!i?.debug_info?.startsWith?.(\"SSAP, AD\")){const o=a.videoDetails?.videoId,s=a.playerConfig?.playbackStartConfig?.startSeconds??0,l=e.getPlayerStateObject?.()?.isBuffering,d=a.playabilityStatus?.errorScreen,c=JSON.stringify(d?.playerErrorMessageRenderer?.subreason?.runs||d?.playerInterstitialRenderer?.content?.interstitialViewModel?.description?.commandRuns);return void(\"UNPLAYABLE\"===a?.playabilityStatus?.status&&!d?.playerErrorMessageRenderer?.playerCaptchaViewModel&&c?.includes?.(\"WEB_PAGE_TYPE_UNKNOWN\")&&c?.includes?.(\"https://support.google.com/youtube/answer/3037019\")?(n=n.slice(1),n.length>0?t(n[0]):t(\"\"),r=!1,e.loadVideoById(o,s)):0===n.length?(r=!1,t(\"\")):l&&\"0.00 s\"===i?.buffer_health_seconds&&\"0x0\"===i?.resolution&&r&&(t(n[0]),r=!1,e.loadVideoById(o,s)))}s.duration>0&&e.seekTo?.(s.duration)}};e(),new MutationObserver((()=>{e()})).observe(document,{childList:!0,subtree:!0})})),window.Map.prototype.has=new Proxy(window.Map.prototype.has,{apply:(e,t,o)=>{if(\"onSnackbarMessage\"===o?.[0]&&!r){const e=document.getElementById(\"movie_player\");if(!e)return;const t=e.getStatsForNerds?.(),o=e.getPlayerStateObject?.()?.isBuffering,a=e.getPlayerResponse?.()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl;o&&\"0.00 s\"===t?.buffer_health_seconds&&\"0x0\"===t?.resolution&&n.length>0&&(a.includes(\"reloadxhr\")&&(n=n.slice(1)),r=!0)}return Reflect.apply(e,t,o)}});const a={apply:(e,t,o)=>{const r=o[0];return\"function\"==typeof r&&r.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(e,t,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,a)})();(function serverContract()",
+  "sedCount",
+  "1",
+  "window,\"fetch\""
+];
+    const $scriptletArglists$ = /* 2 */ "0,0,1,2,3,4;1,0,5";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {

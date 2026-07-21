@@ -4,7 +4,7 @@ import globals from 'globals';
 export default [
     ...ddgConfig,
     {
-        ignores: ['src/scriptlets/**'],
+        ignores: ['src/scriptlets/**', 'scripts/fixtures/**'],
     },
     {
         files: ['scripts/*.mjs'],
