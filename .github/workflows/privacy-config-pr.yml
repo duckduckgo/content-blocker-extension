@@ -59,5 +59,4 @@ jobs:
                   reviewers: |
                       sammacbeth
                       dharb
-                      RendijsSmukulis
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
