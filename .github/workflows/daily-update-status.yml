@@ -1,0 +1,56 @@
+# Digests recent Daily Update / publish-scriptlets / privacy-config-pr runs
+# (and related PRs) into a single comment on a standing Asana task.
+
+name: Daily Update Status Digest
+
+on:
+    schedule:
+        # After Daily Update (07:00 UTC)
+        - cron: '30 7 * * *'
+    workflow_dispatch:
+
+jobs:
+    digest:
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read
+            pull-requests: read
+            contents: read
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build status digest
+              id: summary
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PRIVACY_CONFIG_PAT: ${{ secrets.PRIVACY_CONFIG_PAT }}
+                  LOOKBACK_HOURS: '24'
+              run: npx zx ./scripts/status-digest.mjs
+
+            - name: Require standing Asana task ID
+              env:
+                  ASANA_TASK_ID: ${{ vars.DAILY_UPDATE_ASANA_TASK_ID }}
+              run: |
+                  if [[ -z "${ASANA_TASK_ID}" ]]; then
+                    echo "::error::Repository variable DAILY_UPDATE_ASANA_TASK_ID is not set"
+                    exit 1
+                  fi
+
+            - name: Post digest to Asana
+              uses: duckduckgo/native-github-asana-sync@v2.6.0
+              with:
+                  action: post-comment-asana-task
+                  asana-pat: ${{ secrets.ASANA_ACCESS_TOKEN }}
+                  asana-task-id: ${{ vars.DAILY_UPDATE_ASANA_TASK_ID }}
+                  asana-task-comment: ${{ steps.summary.outputs.comment }}

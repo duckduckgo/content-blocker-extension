@@ -7,6 +7,7 @@
     "scripts": {
         "update": "node ./scripts/update.mjs && npm run lint-fix",
         "package": "zx ./scripts/package.mjs",
+        "status-digest": "zx ./scripts/status-digest.mjs",
         "test": "node --test scripts/**/*.test.mjs",
         "lint": "eslint . && prettier . --check",
         "lint-fix": "eslint . --fix && prettier . --write"
