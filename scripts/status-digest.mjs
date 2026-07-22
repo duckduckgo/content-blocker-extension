@@ -19,25 +19,12 @@ import { appendFile } from 'node:fs/promises';
 const LOOKBACK_HOURS = Number(process.env.LOOKBACK_HOURS ?? 24);
 const PRIVACY_CONFIG_PAT = process.env.PRIVACY_CONFIG_PAT ?? '';
 const PRIVACY_CONFIG_REPO = 'duckduckgo/privacy-configuration';
-const RUN_JSON_FIELDS =
-    'databaseId,conclusion,status,createdAt,updatedAt,url,event,displayTitle';
+const RUN_JSON_FIELDS = 'databaseId,conclusion,status,createdAt,updatedAt,url,event,displayTitle';
 const PR_JSON_FIELDS = 'number,url,title,state,createdAt,closedAt,mergedAt';
 const REMOTE_PR_JSON_FIELDS = `${PR_JSON_FIELDS},headRefName`;
 
-const FAILURE_CONCLUSIONS = new Set([
-    'failure',
-    'timed_out',
-    'cancelled',
-    'startup_failure',
-    'action_required',
-]);
-const IN_PROGRESS_STATUSES = new Set([
-    'queued',
-    'in_progress',
-    'pending',
-    'requested',
-    'waiting',
-]);
+const FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out', 'cancelled', 'startup_failure', 'action_required']);
+const IN_PROGRESS_STATUSES = new Set(['queued', 'in_progress', 'pending', 'requested', 'waiting']);
 
 $.verbose = false;
 
@@ -99,9 +86,7 @@ function formatRunLines(runs) {
  * @returns {string[]}
  */
 function collectSignals(runs) {
-    return runs.map((run) =>
-        run.status !== 'completed' ? run.status : (run.conclusion ?? 'unknown'),
-    );
+    return runs.map((run) => (run.status !== 'completed' ? run.status : (run.conclusion ?? 'unknown')));
 }
 
 /**
@@ -113,11 +98,7 @@ function pickRelevantPr(prs) {
         if (pr.state === 'OPEN') {
             return true;
         }
-        return (
-            toMs(pr.createdAt) >= cutoffMs ||
-            toMs(pr.mergedAt) >= cutoffMs ||
-            toMs(pr.closedAt) >= cutoffMs
-        );
+        return toMs(pr.createdAt) >= cutoffMs || toMs(pr.mergedAt) >= cutoffMs || toMs(pr.closedAt) >= cutoffMs;
     });
 
     relevant.sort((a, b) => {
@@ -185,8 +166,7 @@ const dailyRuns = await listRunsInWindow('daily-update.yml');
 const publishRuns = await listRunsInWindow('publish-scriptlets.yml');
 const privacyRuns = await listRunsInWindow('privacy-config-pr.yml');
 
-const localPrsRaw =
-    await $`gh pr list --head update/scriptlets-auto --state all --limit 5 --json ${PR_JSON_FIELDS}`;
+const localPrsRaw = await $`gh pr list --head update/scriptlets-auto --state all --limit 5 --json ${PR_JSON_FIELDS}`;
 const localPrs = JSON.parse(localPrsRaw.stdout);
 
 /** @type {object[]} */
@@ -197,23 +177,13 @@ if (PRIVACY_CONFIG_PAT) {
     })`gh pr list -R ${PRIVACY_CONFIG_REPO} --state all --limit 30 --json ${REMOTE_PR_JSON_FIELDS}`;
     remotePrs = JSON.parse(remoteRaw.stdout);
 } else {
-    echo(
-        'Warning: PRIVACY_CONFIG_PAT is not set; skipping privacy-configuration PR lookup',
-    );
+    echo('Warning: PRIVACY_CONFIG_PAT is not set; skipping privacy-configuration PR lookup');
 }
 
-const scriptletsConfigPrs = remotePrs.filter((pr) =>
-    String(pr.headRefName ?? '').startsWith('update-ad-blocking-extension-scriptlets-'),
-);
-const extensionUrlPrs = remotePrs.filter((pr) =>
-    String(pr.headRefName ?? '').startsWith('update-content-blocker-extension-'),
-);
+const scriptletsConfigPrs = remotePrs.filter((pr) => String(pr.headRefName ?? '').startsWith('update-ad-blocking-extension-scriptlets-'));
+const extensionUrlPrs = remotePrs.filter((pr) => String(pr.headRefName ?? '').startsWith('update-content-blocker-extension-'));
 
-const signals = [
-    ...collectSignals(dailyRuns),
-    ...collectSignals(publishRuns),
-    ...collectSignals(privacyRuns),
-];
+const signals = [...collectSignals(dailyRuns), ...collectSignals(publishRuns), ...collectSignals(privacyRuns)];
 const overall = overallStatus(signals, dailyRuns.length === 0);
 
 const comment = [
