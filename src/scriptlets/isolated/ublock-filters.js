@@ -127,10 +127,8 @@ function lookupElementsFn(directive, until = 0) {
             if ( elem.openOrClosedShadowRoot ) { // Firefox
                 return elem.openOrClosedShadowRoot;
             }
-            if ( typeof chrome === 'object' ) { // Chromium
-                if ( chrome.dom && chrome.dom.openOrClosedShadowRoot ) {
-                    return chrome.dom.openOrClosedShadowRoot(elem);
-                }
+            if ( self.chrome?.dom?.openOrClosedShadowRoot ) { // Chromium
+                return self.chrome.dom.openOrClosedShadowRoot(elem);
             }
             return elem.shadowRoot;
         };
@@ -973,7 +971,7 @@ if ( $hasHostnames$ ) {
 // Collect arglist references
 const todo = new Set();
 if ( todoIndices.size !== 0 ) {
-    const $scriptletArglistRefs$ = /* 2 */ "-56;0,1";
+    const $scriptletArglistRefs$ = /* 2 */ "-52;0,1";
     const arglistRefs = $scriptletArglistRefs$.split(';');
     for ( const i of todoIndices ) {
         for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
