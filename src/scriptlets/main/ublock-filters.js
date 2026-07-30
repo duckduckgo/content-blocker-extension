@@ -2012,7 +2012,8 @@ function preventXhrFn(
 
 function proxyApplyFn(
     target = '',
-    handler = ''
+    handler = '',
+    options = {}
 ) {
     let context = globalThis;
     let prop = target;
@@ -2073,7 +2074,7 @@ function proxyApplyFn(
         };
         proxyApplyFn.isCtor = new Map();
         proxyApplyFn.proxies = new WeakMap();
-        if ( proxyApplyFn.skipToString !== true ) {
+        if ( (options.skipToString || proxyApplyFn.skipToString) !== true ) {
             proxyApplyFn.nativeToString = Function.prototype.toString;
             const proxiedToString = new Proxy(Function.prototype.toString, {
                 apply(target, thisArg) {
@@ -3033,7 +3034,7 @@ if ( $hasHostnames$ ) {
 // Collect arglist references
 const todo = new Set();
 if ( todoIndices.size !== 0 ) {
-    const $scriptletArglistRefs$ = /* 5 */ "17,-36,-1537;17,345,346,347,348,349,350;8,17,345,346,347,348,350;0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16,17,18,345,346,347,348,350;17,345,346,347,348,349,350";
+    const $scriptletArglistRefs$ = /* 5 */ "17,-40,-1540;17,348,349,350,351,352,353;8,17,348,349,350,351,353;0,1,2,3,4,5,6,7,9,10,11,12,13,14,15,16,17,18,348,349,350,351,353;17,348,349,350,351,352,353";
     const arglistRefs = $scriptletArglistRefs$.split(';');
     for ( const i of todoIndices ) {
         for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -3095,6 +3096,8 @@ if ( todo.size === 0 ) { return; }
   "JSON.parse",
   "entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "/get_watch?",
+  "",
+  "",
   "",
   "",
   "",
@@ -3492,7 +3495,6 @@ if ( todo.size === 0 ) { return; }
   "",
   "",
   "",
-  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -3501,7 +3503,7 @@ if ( todo.size === 0 ) { return; }
   "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "url:/reel_watch_sequence?"
 ];
-    const $scriptletArglists$ = /* 25 */ "0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;1,6,7,8;2,9,10,1,2;2,11,10,1,12;3,9,10,1,13;4,14,15,16;4,17,10,16;4,18,19,13;5,14,15,20;5,21,15,20;5,21,15,22;6,23,24;6,23,25;6,23,26;7,27;5,21,15,28;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,427,43;11,428,43;11,429,43;11,430,43;7,431;2,432,10,1,433";
+    const $scriptletArglists$ = /* 25 */ "0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;1,6,7,8;2,9,10,1,2;2,11,10,1,12;3,9,10,1,13;4,14,15,16;4,17,10,16;4,18,19,13;5,14,15,20;5,21,15,20;5,21,15,22;6,23,24;6,23,25;6,23,26;7,27;5,21,15,28;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,428,45;11,429,45;11,430,45;11,431,45;7,432;2,433,10,1,434";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
