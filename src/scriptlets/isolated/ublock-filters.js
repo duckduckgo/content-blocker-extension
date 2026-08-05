@@ -971,7 +971,7 @@ if ( $hasHostnames$ ) {
 // Collect arglist references
 const todo = new Set();
 if ( todoIndices.size !== 0 ) {
-    const $scriptletArglistRefs$ = /* 2 */ "-52;0,1";
+    const $scriptletArglistRefs$ = /* 2 */ "-53;0,1";
     const arglistRefs = $scriptletArglistRefs$.split(';');
     for ( const i of todoIndices ) {
         for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
