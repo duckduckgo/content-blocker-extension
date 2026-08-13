@@ -3039,7 +3039,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1572;20,380,381,382,383,384,385;11,20,380,381,382,383,385;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,380,381,382,383,385;20,380,381,382,383,384,385";
+        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1576;20,380,381,382,383,384,385;11,20,380,381,382,383,385;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,380,381,382,383,385;20,380,381,382,383,384,385";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
