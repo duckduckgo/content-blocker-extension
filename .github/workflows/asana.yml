@@ -24,3 +24,4 @@ jobs:
                   move_to_section_id: '1212854970477717'
                   ASSIGN_PR_AUTHOR: 'true'
                   REVIEW_TASKS_AS_APPROVALS: 'true'
+                  INCLUDE_ASSIGNEES: 'true'
