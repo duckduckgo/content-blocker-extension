@@ -46,22 +46,42 @@
     const TARGET_TYPE = 35; // NEXT_REQUEST_POLICY
     const TARGET_FIELD = 4; // backoffTimeMs
 
+    // Passing a body to the Response constructor for one of these throws, and by
+    // then we would have already locked the original body and have no way back.
+    const NULL_BODY_STATUSES = [204, 205, 304];
+
     const realFetch = window.fetch;
     if (typeof realFetch !== 'function') {
         return;
     }
 
-    const wrapped = function (resource, init) {
-        let url = '';
+    /**
+     * @param {string | Request | URL} resource
+     * @returns {string}
+     */
+    function requestUrl(resource) {
         try {
-            url = typeof resource === 'string' ? resource : (resource && resource.url) || '';
-        } catch (e) {}
+            if (typeof resource === 'string') {
+                return resource;
+            }
+            // A Request exposes `url`; a URL has to be stringified to its href.
+            if (resource && typeof resource.url === 'string') {
+                return resource.url;
+            }
+            return String(resource);
+        } catch (e) {
+            return '';
+        }
+    }
+
+    const wrapped = function (resource, init) {
+        const url = requestUrl(resource);
         if (!url.includes('googlevideo.com') || !url.includes('sabr=1')) {
             return realFetch.apply(this, arguments);
         }
 
         return realFetch.apply(this, arguments).then(function (response) {
-            if (!response.body) {
+            if (!response.body || NULL_BODY_STATUSES.indexOf(response.status) !== -1) {
                 return response;
             }
             try {
@@ -74,11 +94,21 @@
                         mutator.flush(controller);
                     },
                 });
-                return new Response(response.body.pipeThrough(tap), {
+                const mutated = new Response(response.body.pipeThrough(tap), {
                     status: response.status,
                     statusText: response.statusText,
                     headers: response.headers,
                 });
+                // A constructed Response reports its own url as '' and its type as
+                // 'default'. SABR responses can be redirected, so carry the
+                // original values across rather than let the player see ours.
+                Object.defineProperties(mutated, {
+                    ok: { value: response.ok },
+                    redirected: { value: response.redirected },
+                    type: { value: response.type },
+                    url: { value: response.url },
+                });
+                return mutated;
             } catch (e) {
                 return response; // never break playback on our account
             }
@@ -89,19 +119,11 @@
         window.fetch = wrapped;
     } catch (e) {}
 
-    // YouTube is a single-page app; a navigation can leave a different `fetch` in
-    // place, so re-install ours after one.
-    window.addEventListener(
-        'yt-navigate-finish',
-        function () {
-            if (window.fetch !== wrapped) {
-                try {
-                    window.fetch = wrapped;
-                } catch (e) {}
-            }
-        },
-        true,
-    );
+    // Deliberately no re-install after a `yt-navigate-finish`: other content
+    // scripts in this world wrap fetch by delegating to whatever they found
+    // (uBlock Origin's scriptlets install `self.fetch = new Proxy(self.fetch)`),
+    // so we stay in the chain on our own. Reassigning would drop their wrapper,
+    // and delegating to theirs would call straight back into ours.
 
     /**
      * A single-consumer UMP part reader that forwards its input downstream.
@@ -110,6 +132,11 @@
      * goes out as soon as it is parsed, then the payload is passed through in
      * whatever chunks the network delivers. A small type-35 part is held until
      * complete so field 4 can be rewritten in place, then emitted.
+     *
+     * If parsing ever throws — a malformed part, a framing change we do not
+     * understand — the reader gives up and becomes a plain passthrough for the
+     * rest of the response instead of letting the error reach the stream, which
+     * would abort the download mid-video.
      * @returns {{ push: (chunk: Uint8Array, controller: TransformStreamDefaultController) => void,
      *             flush: (controller: TransformStreamDefaultController) => void }}
      */
@@ -123,6 +150,7 @@
         let collectBuf = null;
         let collectPos = 0;
         let ended = false;
+        let bypassed = false;
 
         function flushCollect(controller) {
             if (curType === TARGET_TYPE) {
@@ -191,13 +219,46 @@
             }
         }
 
+        /**
+         * Emit every byte read from the response but not yet forwarded, in the
+         * order it arrived, and stop holding it. Used when the response ends
+         * mid-part and when we abandon parsing, so neither case loses data.
+         * @param {TransformStreamDefaultController} controller
+         */
+        function emitHeld(controller) {
+            if (collectHeader) {
+                controller.enqueue(collectHeader);
+                collectHeader = null;
+            }
+            if (collectBuf && collectPos > 0) {
+                controller.enqueue(collectBuf.subarray(0, collectPos));
+            }
+            collectBuf = null;
+            collectPos = 0;
+            if (carry.length > 0) {
+                controller.enqueue(carry);
+                carry = new Uint8Array(0);
+            }
+        }
+
         return {
             push(chunk, controller) {
                 if (ended || !chunk || chunk.length === 0) {
                     return;
                 }
-                carry = concat(carry, chunk);
-                process(controller);
+                if (bypassed) {
+                    controller.enqueue(chunk);
+                    return;
+                }
+                try {
+                    carry = concat(carry, chunk);
+                    process(controller);
+                } catch (e) {
+                    bypassed = true;
+                    try {
+                        emitHeld(controller);
+                    } catch (err) {}
+                }
             },
             flush(controller) {
                 if (ended) {
@@ -207,14 +268,7 @@
                 // A truncated response must still reach the player intact, so emit
                 // whatever we are holding rather than dropping it.
                 try {
-                    if (mode === 'collect' && collectBuf) {
-                        if (collectHeader) {
-                            controller.enqueue(collectHeader);
-                        }
-                        controller.enqueue(collectPos < collectBuf.length ? collectBuf.subarray(0, collectPos) : collectBuf);
-                    } else if (carry.length > 0) {
-                        controller.enqueue(carry);
-                    }
+                    emitHeld(controller);
                 } catch (e) {}
             },
         };

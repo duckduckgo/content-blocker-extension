@@ -92,7 +92,7 @@ function nextRequestPolicy(backoffMs) {
  * with a response body delivered in the given chunks.
  * @returns {{ fetch: Function, setUpstream: (fn: Function) => void, listeners: Record<string, Function[]> }}
  */
-function loadContentScript() {
+function loadContentScript({ failAllocationOfSize = null } = {}) {
     /** @type {Record<string, Function[]>} */
     const listeners = {};
     let upstream = () => {
@@ -105,7 +105,21 @@ function loadContentScript() {
         },
     };
 
-    const context = vm.createContext({ window, TransformStream, Response, ReadableStream, Uint8Array, Math });
+    // Allocating the collect buffer is the one place inside the parser that can
+    // realistically throw, so it is the seam used to test the bypass path.
+    const allocator =
+        failAllocationOfSize === null
+            ? Uint8Array
+            : new Proxy(Uint8Array, {
+                  construct(target, args) {
+                      if (args[0] === failAllocationOfSize) {
+                          throw new RangeError('allocation refused');
+                      }
+                      return Reflect.construct(target, args);
+                  },
+              });
+
+    const context = vm.createContext({ window, TransformStream, Response, ReadableStream, Uint8Array: allocator, Math, Object, String });
     vm.runInContext(source, context, { filename: scriptPath });
 
     return { window, listeners, setUpstream: (fn) => (upstream = fn) };
@@ -272,14 +286,124 @@ test('requests that are not SABR media are not intercepted', async () => {
     assert.equal(noSabrFlag, original, 'a googlevideo request without sabr=1 must reach the caller untouched');
 });
 
-test('the fetch hook is reinstalled after a YouTube SPA navigation', async () => {
+test('a later fetch wrapper in the same world is left in place and still reaches us', async () => {
+    const input = new Uint8Array([...umpPart(20, mediaPayload(16, 1)), ...nextRequestPolicy(4000)]);
     const harness = loadContentScript();
-    const hook = harness.window.fetch;
+    harness.setUpstream(() => Promise.resolve(responseOf([input])));
 
-    harness.window.fetch = () => Promise.resolve(new Response('replaced'));
-    for (const listener of harness.listeners['yt-navigate-finish']) {
-        listener();
-    }
+    // uBlock Origin's scriptlets run in this world and install
+    // `self.fetch = new Proxy(self.fetch, ...)`. Reinstalling ours over the top
+    // would drop their proxy, so we must survive underneath it instead.
+    let reachedOuterWrapper = false;
+    harness.window.fetch = new Proxy(harness.window.fetch, {
+        apply(target, thisArg, args) {
+            reachedOuterWrapper = true;
+            return Reflect.apply(target, thisArg, args);
+        },
+    });
 
-    assert.equal(harness.window.fetch, hook);
+    const output = new Uint8Array(await (await harness.window.fetch(sabrUrl)).arrayBuffer());
+
+    assert.ok(reachedOuterWrapper, 'the outer wrapper must still be the installed fetch');
+    assert.equal(harness.listeners['yt-navigate-finish'], undefined, 'nothing may reinstall the hook over a later wrapper');
+    assert.equal(output.length, input.length);
+    assert.notDeepEqual(output, input, 'the backoff must still be rewritten when called through the outer wrapper');
+});
+
+test('a URL object is recognised as a SABR request', async () => {
+    const input = new Uint8Array(nextRequestPolicy(4000));
+    const harness = loadContentScript();
+    harness.setUpstream(() => Promise.resolve(responseOf([input])));
+
+    const output = new Uint8Array(await (await harness.window.fetch(new URL(sabrUrl))).arrayBuffer());
+
+    assert.notDeepEqual(output, input, 'a URL argument must not slip past the hook unmodified');
+});
+
+test('a Request object is recognised as a SABR request', async () => {
+    const input = new Uint8Array(nextRequestPolicy(4000));
+    const harness = loadContentScript();
+    harness.setUpstream(() => Promise.resolve(responseOf([input])));
+
+    const output = new Uint8Array(await (await harness.window.fetch(new Request(sabrUrl))).arrayBuffer());
+
+    assert.notDeepEqual(output, input, 'a Request argument must not slip past the hook unmodified');
+});
+
+test('a null-body status is passed through instead of being rebuilt', async () => {
+    // The Response constructor rejects a body on a 204, and by then the original
+    // body would already be locked, leaving the player with nothing to read.
+    const harness = loadContentScript();
+    const upstream = {
+        body: new ReadableStream({
+            start(controller) {
+                controller.close();
+            },
+        }),
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+        ok: true,
+        redirected: false,
+        type: 'cors',
+        url: sabrUrl,
+    };
+    harness.setUpstream(() => Promise.resolve(upstream));
+
+    const response = await harness.window.fetch(sabrUrl);
+
+    assert.equal(response, upstream, 'the original response must be handed back untouched');
+    // Piping before the constructor throws would leave the caller holding a
+    // response whose body is locked to a stream nobody reads.
+    assert.equal(response.body.locked, false, 'the body must still be readable by the player');
+});
+
+test('the rebuilt response keeps the identity of the original', async () => {
+    const harness = loadContentScript();
+    const redirectedTo = 'https://rr4---sn-xyz.googlevideo.com/videoplayback?sabr=1&rn=8';
+    harness.setUpstream(() => {
+        const upstream = responseOf([new Uint8Array(umpPart(21, mediaPayload(32, 1)))]);
+        Object.defineProperties(upstream, {
+            redirected: { value: true },
+            type: { value: 'cors' },
+            url: { value: redirectedTo },
+        });
+        return Promise.resolve(upstream);
+    });
+
+    const response = await harness.window.fetch(sabrUrl);
+
+    assert.equal(response.url, redirectedTo, 'a SABR redirect must stay visible to the player');
+    assert.equal(response.redirected, true);
+    assert.equal(response.type, 'cors');
+    assert.equal(response.ok, true);
+    assert.equal(response.status, 200);
+});
+
+test('a parser failure falls back to passthrough without losing or altering bytes', async () => {
+    const policy = nextRequestPolicy(4000);
+    const policyPayloadSize = policy.length - 2; // the part minus its type and size varints
+    const stream = [...umpPart(21, mediaPayload(48, 1)), ...policy, ...umpPart(21, mediaPayload(48, 2))];
+    const input = new Uint8Array(stream);
+
+    const harness = loadContentScript({ failAllocationOfSize: policyPayloadSize });
+    harness.setUpstream(() => Promise.resolve(responseOf([input])));
+
+    const output = new Uint8Array(await (await harness.window.fetch(sabrUrl)).arrayBuffer());
+
+    assert.deepEqual(output, input, 'a parser failure must degrade to an exact passthrough');
+});
+
+test('a parser failure keeps passing later chunks through untouched', async () => {
+    const policy = nextRequestPolicy(4000);
+    const stream = [...policy, ...umpPart(21, mediaPayload(64, 3)), ...nextRequestPolicy(2500)];
+    const input = new Uint8Array(stream);
+
+    const harness = loadContentScript({ failAllocationOfSize: policy.length - 2 });
+    // The failure happens on the first chunk; everything after it must still arrive.
+    harness.setUpstream(() => Promise.resolve(responseOf(split(input, 16))));
+
+    const output = new Uint8Array(await (await harness.window.fetch(sabrUrl)).arrayBuffer());
+
+    assert.deepEqual(output, input);
 });
