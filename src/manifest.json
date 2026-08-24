@@ -61,6 +61,14 @@
             "match_origin_as_fallback": true,
             "run_at": "document_start",
             "world": "ISOLATED"
+        },
+        {
+            "matches": ["*://*.youtube.com/*"],
+            "js": ["content-scripts/yt-sabr-fix.js"],
+            "all_frames": true,
+            "match_origin_as_fallback": true,
+            "run_at": "document_start",
+            "world": "MAIN"
         }
     ]
 }

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { mergeContentScripts } from './merge-content-scripts.mjs';
 import { pruneScriptlet } from './prune-scriptlet.mjs';
 
 const includeExperimentalScriptlets = false;
@@ -47,7 +48,7 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
         }
     }
     const manifest = JSON.parse(fs.readFileSync(`src/manifest.json`, 'utf8'));
-    manifest.content_scripts = contentScripts;
+    manifest.content_scripts = mergeContentScripts(contentScripts, manifest.content_scripts);
     manifest.version = new Date()
         .toISOString()
         .slice(0, 10)
@@ -55,5 +56,5 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
         .map((v) => parseInt(v, 10))
         .join('.');
     fs.writeFileSync(`src/manifest.json`, JSON.stringify(manifest, null, 4));
-    console.log(`[Updated manifest.json with ${contentScripts.length} content scripts]`);
+    console.log(`[Updated manifest.json with ${manifest.content_scripts.length} content scripts]`);
 })();
