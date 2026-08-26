@@ -18,4 +18,11 @@ export default [
             },
         },
     },
+    {
+        files: ['src/content-scripts/**/*.js'],
+        languageOptions: {
+            sourceType: 'script',
+            globals: globals.browser,
+        },
+    },
 ];
