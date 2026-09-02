@@ -1599,6 +1599,194 @@ function matchesStackTraceFn(
     return r;
 }
 
+function modifyXhrResponseFn(
+    propsToMatch = '',
+    modifierFn = ''
+) {
+    if ( typeof propsToMatch !== 'string' ) { return; }
+    const safe = safeSelf();
+    if ( modifyXhrResponseFn.xhrInstances === undefined ) {
+        modifyXhrResponseFn.xhrInstances = new WeakMap();
+    }
+    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
+    const NativeXMLHttpRequest = self.XMLHttpRequest;
+    const TrappedXMLHttpRequest = class XMLHttpRequest extends NativeXMLHttpRequest {
+        open(method, url, ...args) {
+            const haystack = { method, url };
+            if ( propsToMatch === '' ) {
+                safe.uboLog(`modifyXhrResponseFn() / Called: ${safe.JSON_stringify(haystack, null, 2)}`);
+            } else if ( matchObjectPropertiesFn(propNeedles, haystack) ) {
+                modifyXhrResponseFn.xhrInstances.set(this, modifierFn);
+            }
+            return super.open(method, url, ...args);
+        }
+        get response() {
+            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
+            return modifierFn
+                ? modifierFn(this, super.response)
+                : super.response;
+        }
+        get responseText() {
+            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
+            return modifierFn
+                ? modifierFn(this, super.responseText)
+                : super.responseText;
+        }
+        get responseXML() {
+            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
+            return modifierFn
+                ? modifierFn(this, super.responseXML)
+                : super.responseXML;
+        }
+    };
+    proxyToStringFn(TrappedXMLHttpRequest.prototype.open, NativeXMLHttpRequest.prototype.open);
+    proxyToStringFn(TrappedXMLHttpRequest, NativeXMLHttpRequest);
+    self.XMLHttpRequest = TrappedXMLHttpRequest;
+}
+
+function mpegdashPrune(
+    selector = '',
+    propsToMatch = ''
+) {
+    if ( typeof selector !== 'string' ) { return; }
+    if ( selector === '' ) { return; }
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('mpegdash-prune', selector, propsToMatch);
+    const queryAll = (xmlDoc, selector) => {
+        if ( selector.startsWith('xpath:') === false ) {
+            return Array.from(xmlDoc.querySelectorAll(selector));
+        }
+        const xpr = xmlDoc.evaluate(
+            selector.slice(6),
+            xmlDoc,
+            null,
+            XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
+            null
+        );
+        const out = [];
+        for ( let i = 0; i < xpr.snapshotLength; i++ ) {
+            const node = xpr.snapshotItem(i);
+            out.push(node);
+        }
+        return out;
+    };
+    const rePTparse = /^PT(\d+D)?(\d+H)?(\d+M)?([\d.]+S)?$/;
+    const secondsPerDay = 24 * 60 * 60;
+    const secondsPerHour = 60 * 60;
+    const secondsPerMinute = 60;
+    const secondsFromPT = pt => {
+        const match = rePTparse.exec(pt);
+        if ( match === null ) { return; }
+        let seconds = 0;
+        if ( match[1] ) {
+            const d = parseFloat(match[1].slice(0, -1));
+            if ( isNaN(d) ) { return; }
+            seconds += d * secondsPerDay;
+        }
+        if ( match[2] ) {
+            const h = parseFloat(match[2].slice(0, -1));
+            if ( isNaN(h) ) { return; }
+            seconds += h * secondsPerHour;
+        }
+        if ( match[3] ) {
+            const m = parseFloat(match[3].slice(0, -1));
+            if ( isNaN(m) ) { return; }
+            seconds += m * secondsPerMinute;
+        }
+        if ( match[4] ) {
+            const s = parseFloat(match[4].slice(0, -1));
+            if ( isNaN(s) ) { return; }
+            seconds += s;
+        }
+        return seconds;
+    };
+    const ptFromSeconds = seconds => {
+        const parts = [ 'PT' ];
+        const d = Math.floor(seconds / secondsPerDay);
+        if ( d ) {
+            parts.push(`${d}D`);
+            seconds -= d * secondsPerDay;
+        }
+        const h = Math.floor(seconds / secondsPerHour);
+        if ( h ) {
+            parts.push(`${h}H`);
+            seconds -= h * secondsPerHour;
+        }
+        const m = Math.floor(seconds / secondsPerMinute);
+        if ( m ) {
+            parts.push(`${m}M`);
+            seconds -= m * secondsPerMinute;
+        }
+        parts.push(`${seconds}S`);
+        return parts.join('');
+    };
+    const fixTimeAttributes = xmlDoc => {
+        try {
+            const periods = queryAll(xmlDoc, 'MPD > Period');
+            if ( periods.length === 0 ) { return; }
+            let seconds = 0;
+            for ( const period of periods ) {
+                const startAttrBefore = period.getAttribute('start');
+                const durAttr = period.getAttribute('duration');
+                if ( startAttrBefore === null || durAttr === null ) { continue; }
+                const startAttrAfter = ptFromSeconds(seconds);
+                period.setAttribute('start', startAttrAfter);
+                if ( period.hasAttribute('id') ) {
+                    const idAttr = period.getAttribute('id');
+                    period.setAttribute('id', idAttr.replace(startAttrBefore, startAttrAfter));
+                }
+                seconds += secondsFromPT(durAttr);
+            }
+            const mpds = queryAll(xmlDoc, 'MPD[mediaPresentationDuration]');
+            if ( mpds.length !== 1 ) { return; }
+            mpds[0].setAttribute('mediaPresentationDuration', ptFromSeconds(seconds));
+        } catch {
+        }
+    };
+    const pruneFromDoc = xmlDoc => {
+        try {
+            if ( selector === '' ) {
+                const serializer = new XMLSerializer();
+                safe.uboLog(logPrefix, `Document is\n\t${serializer.serializeToString(xmlDoc)}`);
+            }
+            const items = queryAll(xmlDoc, selector);
+            if ( items.length === 0 ) { return xmlDoc; }
+            safe.uboLog(logPrefix, `Patching ${items.length} items`);
+            for ( const item of items ) {
+                if ( item.nodeType !== 1 ) { continue; }
+                item.setAttribute('duration', 'PT0S');
+            }
+            fixTimeAttributes(xmlDoc);
+        } catch(ex) {
+            safe.uboErr(logPrefix, `Error: ${ex}`);
+        }
+        return xmlDoc;
+    };
+    const pruneFromText = text => {
+        if ( (/^\s*</.test(text) && />\s*$/.test(text)) === false ) {
+            return text;
+        }
+        try {
+            const xmlParser = new DOMParser();
+            const xmlDoc = xmlParser.parseFromString(text, 'text/xml');
+            pruneFromDoc(xmlDoc);
+            const serializer = new XMLSerializer();
+            text = serializer.serializeToString(xmlDoc);
+        } catch {
+        }
+        return text;
+    };
+    modifyXhrResponseFn(propsToMatch, (xhr, before) => {
+        if ( before instanceof XMLDocument ) {
+            return pruneFromDoc(before);
+        }
+        if ( typeof before === 'string' ) {
+            return pruneFromText(before);
+        }
+        return before;
+    });
+}
+
 function objectFindOwnerFn(
     root,
     path,
@@ -2110,6 +2298,27 @@ function proxyApplyFn(
     const proxiedTarget = new Proxy(fn, proxyDetails);
     proxyApplyFn.proxies.set(proxiedTarget, fn);
     context[prop] = proxiedTarget;
+}
+
+function proxyToStringFn(proxiedFn, nativeFn) {
+    if ( proxyToStringFn.proxies === undefined ) {
+        proxyToStringFn.proxies = new WeakMap();
+        proxyToStringFn.nativeToString = Function.prototype.toString;
+        const proxiedToString = new Proxy(Function.prototype.toString, {
+            apply(target, thisArg) {
+                let proxied = thisArg;
+                for(;;) {
+                    const fn = proxyToStringFn.proxies.get(proxied);
+                    if ( fn === undefined ) { break; }
+                    proxied = fn;
+                }
+                return proxyToStringFn.nativeToString.call(proxied);
+            }
+        });
+        proxyToStringFn.proxies.set(proxiedToString, proxyToStringFn.nativeToString);
+        Function.prototype.toString = proxiedToString;
+    }
+    proxyToStringFn.proxies.set(proxiedFn, nativeFn);
 }
 
 function replaceFetchResponseFn(
@@ -2892,41 +3101,14 @@ function xmlPrune(
             });
         }
     });
-    self.XMLHttpRequest.prototype.open = new Proxy(self.XMLHttpRequest.prototype.open, {
-        apply: async (target, thisArg, args) => {
-            if ( reUrl.test(urlFromArg(args[1])) === false ) {
-                return Reflect.apply(target, thisArg, args);
-            }
-            thisArg.addEventListener('readystatechange', function() {
-                if ( thisArg.readyState !== 4 ) { return; }
-                const type = thisArg.responseType;
-                if (
-                    type === 'document' ||
-                    type === '' && thisArg.responseXML instanceof XMLDocument
-                ) {
-                    pruneFromDoc(thisArg.responseXML);
-                    const serializer = new XMLSerializer();
-                    const textout = serializer.serializeToString(thisArg.responseXML);
-                    Object.defineProperty(thisArg, 'responseText', { value: textout });
-                    if ( typeof thisArg.response === 'string' ) {
-                        Object.defineProperty(thisArg, 'response', { value: textout });
-                    }
-                    return;
-                }
-                if (
-                    type === 'text' ||
-                    type === '' && typeof thisArg.responseText === 'string'
-                ) {
-                    const textin = thisArg.responseText;
-                    const textout = pruneFromText(textin);
-                    if ( textout === textin ) { return; }
-                    Object.defineProperty(thisArg, 'response', { value: textout });
-                    Object.defineProperty(thisArg, 'responseText', { value: textout });
-                    return;
-                }
-            });
-            return Reflect.apply(target, thisArg, args);
+    modifyXhrResponseFn(urlPattern, (xhr, before) => {
+        if ( before instanceof XMLDocument ) {
+            return pruneFromDoc(before);
         }
+        if ( typeof before === 'string' ) {
+            return pruneFromText(before);
+        }
+        return before;
     });
 }
 
@@ -3036,7 +3218,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1556,-1909;20,360,361,362,363,364,365;11,20,360,361,362,363,365;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,360,361,362,363,365;20,360,361,362,363,364,365";
+        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1557,-1909;20,360,361,362,363,364,365;11,20,360,361,362,363,365;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,360,361,362,363,365;20,360,361,362,363,364,365";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
