@@ -3218,7 +3218,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1557,-1909;20,360,361,362,363,364,365;11,20,360,361,362,363,365;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,360,361,362,363,365;20,360,361,362,363,364,365";
+        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1558,-1912;20,361,362,363,364,365,366;11,20,361,362,363,364,366;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,361,362,363,364,366;20,361,362,363,364,365,366";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -3256,8 +3256,8 @@ if ( todo.size && todo.has(0) === false ) {
   "propsToMatch",
   "/player?",
   "[?..userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
-  "[?..userAgent*=\"lactmilli\"]..playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
-  "[?..userAgent=/adunit|channel|lactmilli|instream|eafg/]..referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
+  "[?..userAgent=/channel|lactmilli|instream/]..playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
+  "[?..userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/]..referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
   "ytcfg.data_.EXPERIMENT_FLAGS.all_web_enable_network_machine",
   "false",
   "ytcfg.data_.EXPERIMENT_FLAGS.all_web_network_machine_raw_request",
@@ -3665,6 +3665,7 @@ if ( todo.size && todo.has(0) === false ) {
   "",
   "",
   "",
+  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -3673,7 +3674,7 @@ if ( todo.size && todo.has(0) === false ) {
   "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "url:/reel_watch_sequence?"
 ];
-    const $scriptletArglists$ = /* 27 */ ";0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;1,6,7;1,8,7;2,9,10,11;3,12,13,1,2;3,14,13,1,15;4,12,13,1,16;5,17,18,19;5,20,13,19;5,21,22,16;6,17,18,23;6,24,18,23;6,24,18,25;7,26,27;7,26,28;7,26,29;8,30;6,24,18,31;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,413,51;1,414,51;1,415,51;1,416,51;8,417;3,418,13,1,419";
+    const $scriptletArglists$ = /* 27 */ ";0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;1,6,7;1,8,7;2,9,10,11;3,12,13,1,2;3,14,13,1,15;4,12,13,1,16;5,17,18,19;5,20,13,19;5,21,22,16;6,17,18,23;6,24,18,23;6,24,18,25;7,26,27;7,26,28;7,26,29;8,30;6,24,18,31;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,414,51;1,415,51;1,416,51;1,417,51;8,418;3,419,13,1,420";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
