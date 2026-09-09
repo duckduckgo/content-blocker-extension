@@ -260,15 +260,6 @@ function replaceNodeTextFn(
     const reExcludes = extraArgs.excludes
         ? safe.patternToRegex(extraArgs.excludes, 'ms')
         : null;
-    const stop = (takeRecord = true) => {
-        if ( takeRecord ) {
-            handleMutations(observer.takeRecords());
-        }
-        observer.disconnect();
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, 'Quitting');
-        }
-    };
     const textContentFactory = (( ) => {
         const out = { createScript: s => s };
         const { trustedTypes: tt } = self;
@@ -281,19 +272,19 @@ function replaceNodeTextFn(
         }
         return out;
     })();
-    let sedCount = extraArgs.sedCount || 0;
+    let sedCount = extraArgs.sedCount ?? Number.MAX_SAFE_INTEGER;
     const handleNode = node => {
         const before = node.textContent;
         if ( reIncludes ) {
             reIncludes.lastIndex = 0;
-            if ( safe.RegExp_test(reIncludes, before) === false ) { return true; }
+            if ( safe.RegExp_test(reIncludes, before) === false ) { return; }
         }
         if ( reExcludes ) {
             reExcludes.lastIndex = 0;
-            if ( safe.RegExp_test(reExcludes, before) ) { return true; }
+            if ( safe.RegExp_test(reExcludes, before) ) { return; }
         }
         rePattern.lastIndex = 0;
-        if ( safe.RegExp_test(rePattern, before) === false ) { return true; }
+        if ( safe.RegExp_test(rePattern, before) === false ) { return; }
         rePattern.lastIndex = 0;
         const after = pattern !== ''
             ? before.replace(rePattern, replacement)
@@ -305,44 +296,65 @@ function replaceNodeTextFn(
             safe.uboLog(logPrefix, `Text before:\n${before.trim()}`);
         }
         safe.uboLog(logPrefix, `Text after:\n${after.trim()}`);
-        return sedCount === 0 || (sedCount -= 1) !== 0;
+        sedCount -= 1;
+    };
+    const handleTree = root => {
+        const treeWalker = document.createTreeWalker(root,
+            NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT
+        );
+        const { currentScript } = document;
+        let count = 0;
+        for (;;) {
+            const node = treeWalker.nextNode();
+            if ( node === null ) { break; }
+            count += 1;
+            if ( node === currentScript ) { continue; }
+            if ( reNodeName.test(node.nodeName) ) {
+                handleNode(node);
+            } else if ( node.nodeName === 'TEMPLATE' ) {
+                count += handleTree(node.content);
+            } else {
+                continue;
+            }
+            if ( sedCount === 0 ) { break; }
+        }
+        return count;
+    };
+    if ( document.documentElement ) {
+        const count = handleTree(document.documentElement);
+        safe.uboLog(logPrefix, `${count} nodes present before installing mutation observer`);
+    }
+    const stay = Boolean(extraArgs.stay);
+    if ( sedCount === 0 && stay === false ) { return; }
+    const stop = (takeRecord = true) => {
+        const mutations = takeRecord ? observer.takeRecords() : [];
+        observer.disconnect();
+        handleMutations(mutations);
+        if ( safe.logLevel > 1 ) {
+            safe.uboLog(logPrefix, 'Quitting');
+        }
     };
     const handleMutations = mutations => {
         for ( const mutation of mutations ) {
             for ( const node of mutation.addedNodes ) {
-                if ( reNodeName.test(node.nodeName) === false ) { continue; }
-                if ( handleNode(node) ) { continue; }
-                stop(false); return;
+                if ( reNodeName.test(node.nodeName) ) {
+                    handleNode(node);
+                } else if ( node.nodeName === 'TEMPLATE' ) {
+                    handleTree(node.content);
+                } else {
+                    continue;
+                }
+                if ( sedCount === 0 ) { return stop(false); }
             }
         }
     };
     const observer = new MutationObserver(handleMutations);
     observer.observe(document, { childList: true, subtree: true });
-    if ( document.documentElement ) {
-        const treeWalker = document.createTreeWalker(
-            document.documentElement,
-            NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT
-        );
-        let count = 0;
-        for (;;) {
-            const node = treeWalker.nextNode();
-            count += 1;
-            if ( node === null ) { break; }
-            if ( reNodeName.test(node.nodeName) === false ) { continue; }
-            if ( node === document.currentScript ) { continue; }
-            if ( handleNode(node) ) { continue; }
-            stop(); break;
-        }
-        safe.uboLog(logPrefix, `${count} nodes present before installing mutation observer`);
-    }
-    if ( extraArgs.stay ) { return; }
+    if ( stay ) { return; }
     runAt(( ) => {
-        const quitAfter = extraArgs.quitAfter || 0;
-        if ( quitAfter !== 0 ) {
-            setTimeout(( ) => { stop(); }, quitAfter);
-        } else {
-            stop();
-        }
+        const quitAfter = extraArgs.quitAfter ?? 0;
+        if ( quitAfter === 0 ) { return stop(); }
+        setTimeout(( ) => { stop(); }, quitAfter);
     }, 'interactive');
 }
 
@@ -969,7 +981,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 2 */ "-57;1,2";
+        const $scriptletArglistRefs$ = /* 2 */ "-56;2,3";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -1004,15 +1016,17 @@ if ( todo.size && todo.has(0) === false ) {
 [replaceNodeText,removeNodeText];
     const $scriptletArgs$ = /* 8 */ [
   "script",
-  "(function serverContract()",
-  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;const e=ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent,t=t=>{ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent=t?e.replace?.(/(Mozilla\\/5\\.0 \\([^)]+)/,\"$1; \"+t):e},o=[\"channel\",\"lactmilli\"];let r=!1,n=o;document.addEventListener(\"DOMContentLoaded\",(function(){const e=()=>{const e=document.getElementById(\"movie_player\");if(!e||!window.location.href.includes(\"/watch?\"))return void(n=o);const a=e.getPlayerResponse?.(),i=e.getProgressState?.(),s=e.getStatsForNerds?.();let l,d;if(i&&i.duration>0&&(i.loaded<i.duration||i.duration-i.current>1)||a?.videoDetails?.isLive){if(!s?.debug_info?.startsWith?.(\"SSAP, AD\")){const o=a.videoDetails?.videoId,c=a.playerConfig?.playbackStartConfig?.startSeconds??0,u=e.getPlayerStateObject?.()?.isBuffering,y=a.playabilityStatus?.errorScreen,p=JSON.stringify(y?.playerErrorMessageRenderer?.subreason?.runs||y?.playerInterstitialRenderer?.content?.interstitialViewModel?.description?.commandRuns);return void(\"UNPLAYABLE\"===a?.playabilityStatus?.status&&!y?.playerErrorMessageRenderer?.playerCaptchaViewModel&&p?.includes?.(\"WEB_PAGE_TYPE_UNKNOWN\")&&p?.includes?.(\"https://support.google.com/youtube/answer/3037019\")?(n=n.slice(1),n.length>0?t(n[0]):t(\"\"),r=!1,e.loadVideoById(o,c)):0===n.length?(r=!1,t(\"\")):u&&\"0.00 s\"===s?.buffer_health_seconds&&\"0x0\"===s?.resolution&&r?(t(n[0]),r=!1,e.loadVideoById(o,c)):!r&&i.current-c<5&&location.href.includes(\"&list=\")&&null===e.getPlaylistId?.()&&(l=document.querySelector(\"yt-playlist-manager\"),d=l?.getPlaylistData?.(),d&&(l.setPlaylistData?.(d),l.setPlayerPlaybackControlData?.({playlistPanelRenderer:d}))))}i.duration>0&&e.seekTo?.(i.duration)}};e(),new MutationObserver((()=>{e()})).observe(document,{childList:!0,subtree:!0})})),window.Map.prototype.has=new Proxy(window.Map.prototype.has,{apply:(e,t,o)=>{if(\"onSnackbarMessage\"===o?.[0]&&!r){const e=document.getElementById(\"movie_player\");if(!e)return;const t=e.getStatsForNerds?.(),o=e.getPlayerStateObject?.()?.isBuffering,a=e.getPlayerResponse?.()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl;o&&\"0.00 s\"===t?.buffer_health_seconds&&\"0x0\"===t?.resolution&&n.length>0&&(a.includes(\"reloadxhr\")&&(n=n.slice(1)),r=!0)}return Reflect.apply(e,t,o)}});const a={apply:(e,t,o)=>{const r=o[0];return\"function\"==typeof r&&r.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(e,t,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,a)})();(function serverContract()",
+  "",
+  "",
   "sedCount",
   "1",
+  "(function serverContract()",
+  "(()=>{if(\"YOUTUBE_PREMIUM_LOGO\"===ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer?.iconImage?.iconType||location.href.startsWith(\"https://www.youtube.com/tv#/\")||location.href.startsWith(\"https://www.youtube.com/embed/\"))return;const e=ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent,t=t=>{ytcfg.data_.INNERTUBE_CONTEXT.client.userAgent=t?e.replace?.(/(Mozilla\\/5\\.0 \\([^)]+)/,\"$1; \"+t):e},o=[\"channel\",\"lactmilli\"];let r=!1,n=o;document.addEventListener(\"DOMContentLoaded\",(function(){const e=()=>{const e=document.getElementById(\"movie_player\");if(!e||!window.location.href.includes(\"/watch?\"))return void(n=o);const a=e.getPlayerResponse?.(),i=e.getProgressState?.(),s=e.getStatsForNerds?.();let l,d;if(i&&i.duration>0&&(i.loaded<i.duration||i.duration-i.current>1)||a?.videoDetails?.isLive){if(!s?.debug_info?.startsWith?.(\"SSAP, AD\")){const o=a.videoDetails?.videoId,c=a.playerConfig?.playbackStartConfig?.startSeconds??0,u=e.getPlayerStateObject?.()?.isBuffering,y=a.playabilityStatus?.errorScreen,p=JSON.stringify(y?.playerErrorMessageRenderer?.subreason?.runs||y?.playerInterstitialRenderer?.content?.interstitialViewModel?.description?.commandRuns);return void(\"UNPLAYABLE\"===a?.playabilityStatus?.status&&!y?.playerErrorMessageRenderer?.playerCaptchaViewModel&&p?.includes?.(\"WEB_PAGE_TYPE_UNKNOWN\")&&p?.includes?.(\"https://support.google.com/youtube/answer/3037019\")?(n=n.slice(1),n.length>0?t(n[0]):t(\"\"),r=!1,e.loadVideoById(o,c)):0===n.length?(r=!1,t(\"\")):u&&\"0.00 s\"===s?.buffer_health_seconds&&\"0x0\"===s?.resolution&&r?(t(n[0]),r=!1,e.loadVideoById(o,c)):!r&&i.current-c<5&&location.href.includes(\"&list=\")&&null===e.getPlaylistId?.()&&(l=document.querySelector(\"yt-playlist-manager\"),d=l?.getPlaylistData?.(),d&&(l.setPlaylistData?.(d),l.setPlayerPlaybackControlData?.({playlistPanelRenderer:d}))))}i.duration>0&&e.seekTo?.(i.duration)}};e(),new MutationObserver((()=>{e()})).observe(document,{childList:!0,subtree:!0})})),window.Map.prototype.has=new Proxy(window.Map.prototype.has,{apply:(e,t,o)=>{if(\"onSnackbarMessage\"===o?.[0]&&!r){const e=document.getElementById(\"movie_player\");if(!e)return;const t=e.getStatsForNerds?.(),o=e.getPlayerStateObject?.()?.isBuffering,a=e.getPlayerResponse?.()?.playbackTracking?.videostatsPlaybackUrl?.baseUrl;o&&\"0.00 s\"===t?.buffer_health_seconds&&\"0x0\"===t?.resolution&&n.length>0&&(a.includes(\"reloadxhr\")&&(n=n.slice(1)),r=!0)}return Reflect.apply(e,t,o)}});const a={apply:(e,t,o)=>{const r=o[0];return\"function\"==typeof r&&r.toString().includes(\"onAbnormalityDetected\")&&(o[0]=function(){}),Reflect.apply(e,t,o)}};window.Promise.prototype.then=new Proxy(window.Promise.prototype.then,a)})();(function serverContract()",
   "excludes",
   "MutationObserver",
   "window,\"fetch\""
 ];
-    const $scriptletArglists$ = /* 2 */ ";0,0,1,2,3,4,5,6;1,0,7";
+    const $scriptletArglists$ = /* 2 */ ";;0,0,5,6,3,4,7,8;1,0,9";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
