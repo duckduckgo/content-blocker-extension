@@ -2872,6 +2872,71 @@ function trustedPreventDomBypass(
     });
 }
 
+function trustedReplaceArgument(
+    propChain = '',
+    argposRaw = '',
+    argraw = '',
+    ...varargs
+) {
+    if ( propChain === '' ) { return; }
+    const safe = safeSelf();
+    const logPrefix = safe.makeLogPrefix('trusted-replace-argument', propChain, argposRaw, argraw);
+    const argoffset = parseInt(argposRaw, 10) || 0;
+    const extraArgs = safe.parseVarargs(varargs);
+    let replacer;
+    if ( argraw.startsWith('repl:/') ) {
+        const parsed = parseReplaceFn(argraw.slice(5));
+        if ( parsed === undefined ) { return; }
+        replacer = arg => `${arg}`.replace(replacer.re, replacer.replacement);
+        Object.assign(replacer, parsed);
+    } else if ( argraw.startsWith('add:') ) {
+        const delta = parseFloat(argraw.slice(4));
+        if ( isNaN(delta) ) { return; }
+        replacer = arg => Number(arg) + delta;
+    } else {
+        const value = validateConstantFn(true, argraw, extraArgs);
+        replacer = ( ) => value;
+    }
+    const reCondition = extraArgs.condition
+        ? safe.patternToRegex(`${extraArgs.condition}`)
+        : /^/;
+    const getArg = context => {
+        if ( argposRaw === 'this' ) { return context.thisArg; }
+        const { callArgs } = context;
+        const argpos = argoffset >= 0 ? argoffset : callArgs.length - argoffset;
+        if ( argpos < 0 || argpos >= callArgs.length ) { return; }
+        context.private = { argpos };
+        return callArgs[argpos];
+    };
+    const setArg = (context, value) => {
+        if ( argposRaw === 'this' ) {
+            if ( value !== context.thisArg ) {
+                context.thisArg = value;
+            }
+        } else if ( context.private ) {
+            context.callArgs[context.private.argpos] = value;
+        }
+    };
+    proxyApplyFn(propChain, function(context) {
+        if ( argposRaw === '' ) {
+            safe.uboLog(logPrefix, `Arguments:\n${context.callArgs.join('\n')}`);
+            return context.reflect();
+        }
+        const argBefore = getArg(context);
+        if ( extraArgs.condition !== undefined ) {
+            if ( safe.RegExp_test(reCondition, argBefore) === false ) {
+                return context.reflect();
+            }
+        }
+        const argAfter = replacer(argBefore);
+        if ( argAfter !== argBefore ) {
+            setArg(context, argAfter);
+            safe.uboLog(logPrefix, `Replaced argument:\nBefore: ${JSON.stringify(argBefore)}\nAfter: ${argAfter}`);
+        }
+        return context.reflect();
+    });
+}
+
 function trustedReplaceFetchResponse(...args) {
     replaceFetchResponseFn(true, ...args);
 }
@@ -3218,7 +3283,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1558,-1912;20,361,362,363,364,365,366;11,20,361,362,363,364,366;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,361,362,363,364,366;20,361,362,363,364,365,366";
+        const $scriptletArglistRefs$ = /* 5 */ "23,-62,-1566,-1920;23,369,370,371,372,373,374;14,23,369,370,371,372,374;1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,18,19,20,21,22,23,24,369,370,371,372,374;23,369,370,371,372,373,374";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -3249,18 +3314,25 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const $scriptletFunctions$ = /* 9 */
-[trustedJsonEditXhrRequest,setConstant,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune];
-    const $scriptletArgs$ = /* 39 */ [
-  "[?..userAgent*=\"channel\"]..client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
+    const $scriptletFunctions$ = /* 10 */
+[trustedJsonEditXhrRequest,setConstant,trustedReplaceArgument,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune];
+    const $scriptletArgs$ = /* 46 */ [
+  "[?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
   "propsToMatch",
   "/player?",
-  "[?..userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
-  "[?..userAgent=/channel|lactmilli|instream/]..playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
-  "[?..userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/]..referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
+  "[?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
+  "[?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}",
+  "[?.context.client.userAgent*=\"instream\"].playbackContext[?.contentPlaybackContext]+={\"adPlaybackContext\":{\"adType\":\"AD_TYPE_INSTREAM\"}}",
+  "[?.context.client.userAgent=/channel|lactmilli|instream/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
+  "[?.context.client.userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
   "ytcfg.data_.EXPERIMENT_FLAGS.all_web_enable_network_machine",
   "false",
   "ytcfg.data_.EXPERIMENT_FLAGS.all_web_network_machine_raw_request",
+  "String.prototype.split",
+  "this",
+  "repl:/all_web_enable_network_machine=true&all_web_network_machine_raw_request=true/all_web_enable_network_machine=false&all_web_network_machine_raw_request=false/",
+  "condition",
+  "H5_async_logging_delay_ms=",
   "[native code]",
   "17000",
   "0.001",
@@ -3666,6 +3738,12 @@ if ( todo.size && todo.has(0) === false ) {
   "",
   "",
   "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -3674,7 +3752,7 @@ if ( todo.size && todo.has(0) === false ) {
   "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "url:/reel_watch_sequence?"
 ];
-    const $scriptletArglists$ = /* 27 */ ";0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;1,6,7;1,8,7;2,9,10,11;3,12,13,1,2;3,14,13,1,15;4,12,13,1,16;5,17,18,19;5,20,13,19;5,21,22,16;6,17,18,23;6,24,18,23;6,24,18,25;7,26,27;7,26,28;7,26,29;8,30;6,24,18,31;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,414,51;1,415,51;1,416,51;1,417,51;8,418;3,419,13,1,420";
+    const $scriptletArglists$ = /* 30 */ ";0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;0,6,1,2;0,7,1,2;1,8,9;1,10,9;2,11,12,13,14,15;3,16,17,18;4,19,20,1,2;4,21,20,1,22;5,19,20,1,23;6,24,25,26;6,27,20,26;6,28,29,23;7,24,25,30;7,31,25,30;7,31,25,32;8,33,34;8,33,35;8,33,36;9,37;7,31,25,38;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,427,58;1,428,58;1,429,58;1,430,58;9,431;4,432,20,1,433";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
