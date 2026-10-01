@@ -1193,57 +1193,6 @@ function jsonEditFn(trusted = false, jsonq = '', ...varargs) {
     });
 }
 
-function jsonEditXhrRequestFn(trusted, jsonq = '', ...varargs) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}json-edit-xhr-request`,
-        jsonq
-    );
-    const xhrInstances = new WeakMap();
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
-    self.XMLHttpRequest = class extends self.XMLHttpRequest {
-        open(method, url, ...args) {
-            const xhrDetails = { method, url };
-            const matched = propNeedles.size === 0 ||
-                matchObjectPropertiesFn(propNeedles, xhrDetails);
-            if ( matched ) {
-                if ( safe.logLevel > 1 && Array.isArray(matched) ) {
-                    safe.uboLog(logPrefix, `Matched "propsToMatch":\n\t${matched.join('\n\t')}`);
-                }
-                xhrInstances.set(this, xhrDetails);
-            }
-            return super.open(method, url, ...args);
-        }
-        send(body) {
-            const xhrDetails = xhrInstances.get(this);
-            if ( xhrDetails ) {
-                body = this.#filterBody(body) || body;
-            }
-            super.send(body);
-        }
-        #filterBody(body) {
-            if ( typeof body !== 'string' ) { return; }
-            let data;
-            try { data = safe.JSON_parse(body); }
-            catch { }
-            if ( data instanceof Object === false ) { return; }
-            const objAfter = jsonp.apply(data);
-            if ( objAfter === undefined ) { return; }
-            body = safe.JSON_stringify(objAfter);
-            safe.uboLog(logPrefix, 'Edited');
-            if ( safe.logLevel > 1 ) {
-                safe.uboLog(logPrefix, `After edit:\n${body}`);
-            }
-            return body;
-        }
-    };
-}
-
 function jsonEditXhrResponseFn(trusted, jsonq = '', ...varargs) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix(
@@ -2880,8 +2829,8 @@ function trapPropertyFn(propChain, handler, options = {}) {
     return entry.value;
 }
 
-function trustedJsonEditXhrRequest(jsonq = '', ...args) {
-    jsonEditXhrRequestFn(true, jsonq, ...args);
+function trustedEditInboundObject(propChain = '', argPos = '', jsonq = '') {
+    editInboundObjectFn(true, propChain, argPos, jsonq);
 }
 
 function trustedPreventDomBypass(
@@ -2922,71 +2871,6 @@ function trustedPreventDomBypass(
             }
         }
         return r;
-    });
-}
-
-function trustedReplaceArgument(
-    propChain = '',
-    argposRaw = '',
-    argraw = '',
-    ...varargs
-) {
-    if ( propChain === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('trusted-replace-argument', propChain, argposRaw, argraw);
-    const argoffset = parseInt(argposRaw, 10) || 0;
-    const extraArgs = safe.parseVarargs(varargs);
-    let replacer;
-    if ( argraw.startsWith('repl:/') ) {
-        const parsed = parseReplaceFn(argraw.slice(5));
-        if ( parsed === undefined ) { return; }
-        replacer = arg => `${arg}`.replace(replacer.re, replacer.replacement);
-        Object.assign(replacer, parsed);
-    } else if ( argraw.startsWith('add:') ) {
-        const delta = parseFloat(argraw.slice(4));
-        if ( isNaN(delta) ) { return; }
-        replacer = arg => Number(arg) + delta;
-    } else {
-        const value = validateConstantFn(true, argraw, extraArgs);
-        replacer = ( ) => value;
-    }
-    const reCondition = extraArgs.condition
-        ? safe.patternToRegex(`${extraArgs.condition}`)
-        : /^/;
-    const getArg = context => {
-        if ( argposRaw === 'this' ) { return context.thisArg; }
-        const { callArgs } = context;
-        const argpos = argoffset >= 0 ? argoffset : callArgs.length - argoffset;
-        if ( argpos < 0 || argpos >= callArgs.length ) { return; }
-        context.private = { argpos };
-        return callArgs[argpos];
-    };
-    const setArg = (context, value) => {
-        if ( argposRaw === 'this' ) {
-            if ( value !== context.thisArg ) {
-                context.thisArg = value;
-            }
-        } else if ( context.private ) {
-            context.callArgs[context.private.argpos] = value;
-        }
-    };
-    proxyApplyFn(propChain, function(context) {
-        if ( argposRaw === '' ) {
-            safe.uboLog(logPrefix, `Arguments:\n${context.callArgs.join('\n')}`);
-            return context.reflect();
-        }
-        const argBefore = getArg(context);
-        if ( extraArgs.condition !== undefined ) {
-            if ( safe.RegExp_test(reCondition, argBefore) === false ) {
-                return context.reflect();
-            }
-        }
-        const argAfter = replacer(argBefore);
-        if ( argAfter !== argBefore ) {
-            setArg(context, argAfter);
-            safe.uboLog(logPrefix, `Replaced argument:\nBefore: ${JSON.stringify(argBefore)}\nAfter: ${argAfter}`);
-        }
-        return context.reflect();
     });
 }
 
@@ -3965,7 +3849,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "23,-62,-1569,-1924;23,368,369,370,371,372,373;14,23,368,369,370,371,373;1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,18,19,20,21,22,23,24,368,369,370,371,373;23,368,369,370,371,372,373";
+        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1566,-1924;20,365,366,367,368,369,370;11,20,365,366,367,368,370;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,365,366,367,368,370;20,365,366,367,368,369,370";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -3996,30 +3880,24 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const $scriptletFunctions$ = /* 10 */
-[trustedJsonEditXhrRequest,setConstant,trustedReplaceArgument,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune];
-    const $scriptletArgs$ = /* 46 */ [
-  "[?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
-  "propsToMatch",
-  "/player?",
-  "[?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
-  "[?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}",
-  "[?.context.client.userAgent*=\"instream\"].playbackContext[?.contentPlaybackContext]+={\"adPlaybackContext\":{\"adType\":\"AD_TYPE_INSTREAM\"}}",
-  "[?.context.client.userAgent=/channel|lactmilli|instream/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
-  "[?.context.client.userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
-  "ytcfg.data_.EXPERIMENT_FLAGS.all_web_enable_network_machine",
-  "false",
-  "ytcfg.data_.EXPERIMENT_FLAGS.all_web_network_machine_raw_request",
-  "String.prototype.split",
-  "this",
-  "repl:/all_web_enable_network_machine=true&all_web_network_machine_raw_request=true/all_web_enable_network_machine=false&all_web_network_machine_raw_request=false/",
-  "condition",
-  "H5_async_logging_delay_ms=",
+    const $scriptletFunctions$ = /* 9 */
+[trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant];
+    const $scriptletArgs$ = /* 40 */ [
+  "JSON.stringify",
+  "0",
+  "[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
+  "[?.attestationRequest][?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
+  "[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}",
+  "[?.attestationRequest][?.context.client.userAgent*=\"instream\"].playbackContext[?.contentPlaybackContext]+={\"adPlaybackContext\":{\"adType\":\"AD_TYPE_INSTREAM\"}}",
+  "[?.attestationRequest][?.context.client.userAgent=/channel|lactmilli|instream/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
+  "[?.attestationRequest][?.context.client.userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
   "[native code]",
   "17000",
   "0.001",
   "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots",
   "",
+  "propsToMatch",
+  "/player?",
   "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots",
   "/playlist?",
   "/\\/player(?:\\?.+)?$/",
@@ -4423,6 +4301,7 @@ if ( todo.size && todo.has(0) === false ) {
   "",
   "",
   "",
+  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
@@ -4431,7 +4310,7 @@ if ( todo.size && todo.has(0) === false ) {
   "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
   "url:/reel_watch_sequence?"
 ];
-    const $scriptletArglists$ = /* 30 */ ";0,0,1,2;0,3,1,2;0,4,1,2;0,5,1,2;0,6,1,2;0,7,1,2;1,8,9;1,10,9;2,11,12,13,14,15;3,16,17,18;4,19,20,1,2;4,21,20,1,22;5,19,20,1,23;6,24,25,26;6,27,20,26;6,28,29,23;7,24,25,30;7,31,25,30;7,31,25,32;8,33,34;8,33,35;8,33,36;9,37;7,31,25,38;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;1,424,58;1,425,58;1,426,58;1,427,58;9,428;4,429,20,1,430";
+    const $scriptletArglists$ = /* 27 */ ";0,0,1,2;0,0,1,3;0,0,1,4;0,0,1,5;0,0,1,6;0,0,1,7;1,8,9,10;2,11,12,13,14;2,15,12,13,16;3,11,12,13,17;4,18,19,20;4,21,12,20;4,22,23,17;5,18,19,24;5,25,19,24;5,25,19,26;6,27,28;6,27,29;6,27,30;7,31;5,25,19,32;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,419,52;11,420,52;11,421,52;11,422,52;7,423;2,424,12,13,425";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
