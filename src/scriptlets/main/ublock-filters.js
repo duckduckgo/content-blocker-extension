@@ -1113,6 +1113,10 @@ function jsonEditFetchRequestFn(trusted, jsonq = '', ...varargs) {
     proxyApplyFn('Request', proxyHandler);
 }
 
+function jsonEditFetchResponse(jsonq = '', ...args) {
+    jsonEditFetchResponseFn(false, jsonq, ...args);
+}
+
 function jsonEditFetchResponseFn(trusted, jsonq = '', ...varargs) {
     const safe = safeSelf();
     const logPrefix = safe.makeLogPrefix(
@@ -3849,7 +3853,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1566,-1924;20,365,366,367,368,369,370;11,20,365,366,367,368,370;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,365,366,367,368,370;20,365,366,367,368,369,370";
+        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1568,-1926;20,366,367,368,369,370,371,372;11,20,366,367,368,369,371;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,366,367,368,369,371;20,366,367,368,369,370,371";
         const arglistRefs = $scriptletArglistRefs$.split(';');
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
@@ -3880,9 +3884,9 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const $scriptletFunctions$ = /* 9 */
-[trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant];
-    const $scriptletArgs$ = /* 40 */ [
+    const $scriptletFunctions$ = /* 10 */
+[trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
+    const $scriptletArgs$ = /* 42 */ [
   "JSON.stringify",
   "0",
   "[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
@@ -4302,15 +4306,20 @@ if ( todo.size && todo.has(0) === false ) {
   "",
   "",
   "",
+  "",
+  "",
+  "",
   "ytInitialPlayerResponse.playerAds",
   "ytInitialPlayerResponse.adPlacements",
   "ytInitialPlayerResponse.adSlots",
   "playerResponse.adPlacements",
   "playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important",
   "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
-  "url:/reel_watch_sequence?"
+  "url:/reel_watch_sequence?",
+  "..itemSectionRenderer.contents.*[?.adSlotRenderer]",
+  "/get_watch"
 ];
-    const $scriptletArglists$ = /* 27 */ ";0,0,1,2;0,0,1,3;0,0,1,4;0,0,1,5;0,0,1,6;0,0,1,7;1,8,9,10;2,11,12,13,14;2,15,12,13,16;3,11,12,13,17;4,18,19,20;4,21,12,20;4,22,23,17;5,18,19,24;5,25,19,24;5,25,19,26;6,27,28;6,27,29;6,27,30;7,31;5,25,19,32;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,419,52;11,420,52;11,421,52;11,422,52;7,423;2,424,12,13,425";
+    const $scriptletArglists$ = /* 28 */ ";0,0,1,2;0,0,1,3;0,0,1,4;0,0,1,5;0,0,1,6;0,0,1,7;1,8,9,10;2,11,12,13,14;2,15,12,13,16;3,11,12,13,17;4,18,19,20;4,21,12,20;4,22,23,17;5,18,19,24;5,25,19,24;5,25,19,26;6,27,28;6,27,29;6,27,30;7,31;5,25,19,32;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,422,52;11,423,52;11,424,52;11,425,52;7,426;2,427,12,13,428;28,429,13,430";
     const arglists = $scriptletArglists$.split(';');
     const args = $scriptletArgs$;
     for ( const ref of todo ) {
