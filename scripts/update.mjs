@@ -9,10 +9,33 @@ const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
 const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${uBOLRef}/${rulesetsPath}`;
 
+/** @type {Map<string, Promise<string>>} */
+const fetchCache = new Map();
+
+/**
+ * Fetch a file from the uBOL rulesets, once per run.
+ * @param {string} path relative to the rulesets directory
+ * @returns {Promise<string>}
+ */
+function fetchRuleset(path) {
+    if (!fetchCache.has(path)) {
+        fetchCache.set(
+            path,
+            fetch(`${uBOLBaseURL}/${path}`).then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${path}: ${response.status}`);
+                }
+                return response.text();
+            }),
+        );
+    }
+    return fetchCache.get(path);
+}
+
 (async () => {
     // fetch scriptlets and filter for included filter lists
     console.log('[Fetch scriptlet-details.json]');
-    const scriptletDetails = await (await fetch(`${uBOLBaseURL}/scriptlet-details.json`)).json();
+    const scriptletDetails = JSON.parse(await fetchRuleset('scriptlet-details.json'));
     console.log(` - Available filter lists: ${scriptletDetails.map((pair) => pair[0]).join(', ')}`);
     console.log(` - Selected filter lists: ${includeLists.join(', ')}`);
     const contentScripts = [];
@@ -26,14 +49,15 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
                 console.warn(`Skipping scriptlet ${list} for context ${context}: only wildcard is supported`);
                 continue;
             }
-            const scriptletName = `${context.toLowerCase()}/${list}.js`;
+            const contextDir = context.toLowerCase();
+            const scriptletName = `${contextDir}/${list}.js`;
             console.log(`[Fetch ${scriptletName}]`);
-            fs.mkdirSync(`src/rulesets/scripting/scriptlet/${context.toLowerCase()}`, { recursive: true });
+            fs.mkdirSync(`src/rulesets/scripting/scriptlet/${contextDir}`, { recursive: true });
             if (list !== 'ublock-experimental' || includeExperimentalScriptlets) {
-                fs.writeFileSync(
-                    `src/scriptlets/${scriptletName}`,
-                    pruneScriptlet(await (await fetch(`${uBOLBaseURL}/scripting/scriptlet/${scriptletName}`)).text(), includeHosts),
+                const [begin, ruleset, end] = await Promise.all(
+                    ['scriptlet-begin', list, 'scriptlet-end'].map((name) => fetchRuleset(`scripting/scriptlet/${contextDir}/${name}.js`)),
                 );
+                fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, includeHosts));
             } else {
                 fs.writeFileSync(`src/scriptlets/${scriptletName}`, '');
             }
