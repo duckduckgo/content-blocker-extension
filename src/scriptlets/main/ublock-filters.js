@@ -22,109 +22,21 @@
 
 */
 
-// ruleset: ublock-filters
-
 // Important!
 // Isolate from global scope
 
 // Start of local scope
-(function uBOL_scriptlets() {
+(function uBOL_scriptletFrameworkBegin($SECRET_ID$) {
 
 /******************************************************************************/
 
-class ArglistParser {
-    constructor(separatorChar = ',', mustQuote = false) {
-        this.separatorChar = this.actualSeparatorChar = separatorChar;
-        this.separatorCode = this.actualSeparatorCode = separatorChar.charCodeAt(0);
-        this.mustQuote = mustQuote;
-        this.quoteBeg = 0; this.quoteEnd = 0;
-        this.argBeg = 0; this.argEnd = 0;
-        this.separatorBeg = 0; this.separatorEnd = 0;
-        this.transform = false;
-        this.failed = false;
-        this.reWhitespaceStart = /^\s+/;
-        this.reWhitespaceEnd = /(?:^|\S)(\s+)$/;
-        this.reOddTrailingEscape = /(?:^|[^\\])(?:\\\\)*\\$/;
-        this.reTrailingEscapeChars = /\\+$/;
-    }
-    nextArg(pattern, beg = 0) {
-        const len = pattern.length;
-        this.quoteBeg = beg + this.leftWhitespaceCount(pattern.slice(beg));
-        this.failed = false;
-        const qc = pattern.charCodeAt(this.quoteBeg);
-        if ( qc === 0x22 /* " */ || qc === 0x27 /* ' */ || qc === 0x60 /* ` */ ) {
-            this.indexOfNextArgSeparator(pattern, qc);
-            if ( this.argEnd !== len ) {
-                this.quoteEnd = this.argEnd + 1;
-                this.separatorBeg = this.separatorEnd = this.quoteEnd;
-                this.separatorEnd += this.leftWhitespaceCount(pattern.slice(this.quoteEnd));
-                if ( this.separatorEnd === len ) { return this; }
-                if ( pattern.charCodeAt(this.separatorEnd) === this.separatorCode ) {
-                    this.separatorEnd += 1;
-                    return this;
-                }
-            }
-        }
-        this.indexOfNextArgSeparator(pattern, this.separatorCode);
-        this.separatorBeg = this.separatorEnd = this.argEnd;
-        if ( this.separatorBeg < len ) {
-            this.separatorEnd += 1;
-        }
-        this.argEnd -= this.rightWhitespaceCount(pattern.slice(0, this.separatorBeg));
-        this.quoteEnd = this.argEnd;
-        if ( this.mustQuote ) {
-            this.failed = true;
-        }
-        return this;
-    }
-    normalizeArg(s, char = '') {
-        if ( char === '' ) { char = this.actualSeparatorChar; }
-        let out = '';
-        let pos = 0;
-        while ( (pos = s.lastIndexOf(char)) !== -1 ) {
-            out = s.slice(pos) + out;
-            s = s.slice(0, pos);
-            const match = this.reTrailingEscapeChars.exec(s);
-            if ( match === null ) { continue; }
-            const tail = (match[0].length & 1) !== 0
-                ? match[0].slice(0, -1)
-                : match[0];
-            out = tail + out;
-            s = s.slice(0, -match[0].length);
-        }
-        if ( out === '' ) { return s; }
-        return s + out;
-    }
-    leftWhitespaceCount(s) {
-        const match = this.reWhitespaceStart.exec(s);
-        return match === null ? 0 : match[0].length;
-    }
-    rightWhitespaceCount(s) {
-        const match = this.reWhitespaceEnd.exec(s);
-        return match === null ? 0 : match[1].length;
-    }
-    indexOfNextArgSeparator(pattern, separatorCode) {
-        this.argBeg = this.argEnd = separatorCode !== this.separatorCode
-            ? this.quoteBeg + 1
-            : this.quoteBeg;
-        this.transform = false;
-        if ( separatorCode !== this.actualSeparatorCode ) {
-            this.actualSeparatorCode = separatorCode;
-            this.actualSeparatorChar = String.fromCharCode(separatorCode);
-        }
-        while ( this.argEnd < pattern.length ) {
-            const pos = pattern.indexOf(this.actualSeparatorChar, this.argEnd);
-            if ( pos === -1 ) {
-                return (this.argEnd = pattern.length);
-            }
-            if ( this.reOddTrailingEscape.test(pattern.slice(0, pos)) === false ) {
-                return (this.argEnd = pos);
-            }
-            this.transform = true;
-            this.argEnd = pos + 1;
-        }
-    }
+const scriptletGlobals = self[$SECRET_ID$] = {};
+
+if ( typeof $SCRIPTLET_GLOBALS$ !== 'undefined' && self.$SCRIPTLET_GLOBALS$ === undefined ) {
+    Object.assign(scriptletGlobals, $SCRIPTLET_GLOBALS$); // eslint-disable-line
 }
+
+/******************************************************************************/
 
 class JSONPath {
     static create(query) {
@@ -675,100 +587,6 @@ class JSONPath {
     }
 }
 
-class RangeParser {
-    constructor(s) {
-        this.not = s.charAt(0) === '!';
-        if ( this.not ) { s = s.slice(1); }
-        if ( s === '' ) { return; }
-        const pos = s.indexOf('-');
-        if ( pos !== 0 ) {
-            this.min = this.max = parseInt(s, 10) || 0;
-        }
-        if ( pos !== -1 ) {
-            this.max = parseInt(s.slice(pos + 1), 10) || Number.MAX_SAFE_INTEGER;
-        }
-    }
-    unbound() {
-        return this.min === undefined && this.max === undefined;
-    }
-    test(v) {
-        const n = Math.min(Math.max(Number(v) || 0, 0), Number.MAX_SAFE_INTEGER);
-        if ( this.min === this.max ) {
-            return (this.min === undefined || n === this.min) !== this.not;
-        }
-        if ( this.min === undefined ) {
-            return (n <= this.max) !== this.not;
-        }
-        if ( this.max === undefined ) {
-            return (n >= this.min) !== this.not;
-        }
-        return (n >= this.min && n <= this.max) !== this.not;
-    }
-}
-
-function abortCurrentScriptFn(
-    target = '',
-    needle = '',
-    context = ''
-) {
-    if ( typeof target !== 'string' ) { return; }
-    if ( target === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
-    const reNeedle = safe.patternToRegex(needle);
-    const reContext = safe.patternToRegex(context);
-    const thisScript = document.currentScript;
-    const exceptionToken = getExceptionTokenFn();
-    const scriptTexts = new WeakMap();
-    const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
-    const getScriptText = elem => {
-        let text = textContentGetter.call(elem);
-        if ( text.trim() !== '' ) { return text; }
-        if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
-            [ '', '', '' ];
-        try {
-            switch ( true ) {
-            case mime.endsWith(';base64'):
-                text = self.atob(content);
-                break;
-            default:
-                text = self.decodeURIComponent(content);
-                break;
-            }
-        } catch {
-        }
-        scriptTexts.set(elem, text);
-        return text;
-    };
-    const validate = ( ) => {
-        const e = document.currentScript;
-        if ( e instanceof HTMLScriptElement === false ) { return; }
-        if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) { return; }
-        if ( safe.logLevel > 1 && context !== '' ) {
-            safe.uboLog(logPrefix, `Matched src\n${e.src}`);
-        }
-        const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) { return; }
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
-        }
-        safe.uboLog(logPrefix, 'Aborted');
-        throw new ReferenceError(exceptionToken);
-    };
-    let currentValue = trapPropertyFn(target, {
-        get: function() {
-            validate();
-            return currentValue;
-        },
-        set: function(a) {
-            validate();
-            currentValue = a;
-        }
-    }, { canThrow: true });
-}
-
 function adjustSetTimeout(
     needleArg = '',
     delayArg = '',
@@ -887,164 +705,6 @@ function editInboundObjectFn(
     });
 }
 
-function editObjectOnSetterFn(
-    trusted = false,
-    propChain = '',
-    jsonq = '',
-) {
-    if ( propChain === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}edit-object-on-setter`,
-        propChain,
-        jsonq
-    );
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const editObj = objBefore => {
-        const objAfter = jsonp.apply(objBefore);
-        if ( objAfter === undefined ) { return; }
-        safe.uboLog(logPrefix, 'Edited');
-        if ( safe.logLevel <= 1 ) { return; }
-        safe.uboLog(logPrefix, `After edit:\n${safe.JSON_stringify(objAfter, null, 2)}`);
-    };
-    let currentValue = trapPropertyFn(propChain, {
-        get: function() {
-            return currentValue;
-        },
-        set: function(a) {
-            currentValue = a;
-            if ( currentValue instanceof Object ) {
-                editObj(currentValue);
-            }
-        }
-    });
-    if ( currentValue instanceof Object ) {
-        editObj(currentValue);
-    }
-}
-
-function freezeElementProperty(
-    property = '',
-    selector = '',
-    pattern = ''
-) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('freeze-element-property', property, selector, pattern);
-    const matcher = safe.initPattern(pattern, { canNegate: true });
-    const owner = (( ) => {
-        if ( Object.hasOwn(HTMLScriptElement.prototype, property) ) {
-            return HTMLScriptElement.prototype;
-        }
-        if ( Object.hasOwn(HTMLElement.prototype, property) ) {
-            return HTMLElement.prototype;
-        }
-        if ( Object.hasOwn(Element.prototype, property) ) {
-            return Element.prototype;
-        }
-        if ( Object.hasOwn(Node.prototype, property) ) {
-            return Node.prototype;
-        }
-        return null;
-    })();
-    if ( owner === null ) { return; }
-    const current = safe.Object_getOwnPropertyDescriptor(owner, property);
-    if ( current === undefined ) { return; }
-    const shouldPreventSet = (elem, a) => {
-        if ( selector !== '' ) {
-            if ( typeof elem.matches !== 'function' ) { return false; }
-            if ( elem.matches(selector) === false ) { return false; }
-        }
-        return safe.testPattern(matcher, `${a}`);
-    };
-    Object.defineProperty(owner, property, {
-        get: function() {
-            return current.get
-                ? current.get.call(this)
-                : current.value;
-        },
-        set: function(a) {
-            if ( shouldPreventSet(this, a) ) {
-                safe.uboLog(logPrefix, 'Assignment prevented');
-            } else if ( current.set ) {
-                current.set.call(this, a);
-            }
-            if ( safe.logLevel > 1 ) {
-                safe.uboLog(logPrefix, `Assigned:\n${a}`);
-            }
-            current.value = a;
-        },
-    });
-}
-
-function generateContentFn(trusted, directive) {
-    const safe = safeSelf();
-    const randomize = len => {
-        const chunks = [];
-        let textSize = 0;
-        do {
-            const s = safe.Math_random().toString(36).slice(2);
-            chunks.push(s);
-            textSize += s.length;
-        }
-        while ( textSize < len );
-        return chunks.join(' ').slice(0, len);
-    };
-    if ( directive === 'true' ) {
-        return randomize(10);
-    }
-    if ( directive === 'emptyObj' ) {
-        return '{}';
-    }
-    if ( directive === 'emptyArr' ) {
-        return '[]';
-    }
-    if ( directive === 'emptyStr' ) {
-        return '';
-    }
-    if ( directive.startsWith('length:') ) {
-        const match = /^length:(\d+)(?:-(\d+))?$/.exec(directive);
-        if ( match === null ) { return ''; }
-        const min = parseInt(match[1], 10);
-        const extent = safe.Math_max(parseInt(match[2], 10) || 0, min) - min;
-        const len = safe.Math_min(min + extent * safe.Math_random(), 500000);
-        return randomize(len | 0);
-    }
-    if ( directive.startsWith('war:') ) {
-        if ( scriptletGlobals.warOrigin === undefined ) { return ''; }
-        return new Promise(resolve => {
-            const warOrigin = scriptletGlobals.warOrigin;
-            const warName = directive.slice(4);
-            const fullpath = [ warOrigin, '/', warName ];
-            const warSecret = scriptletGlobals.warSecret;
-            if ( warSecret !== undefined ) {
-                fullpath.push('?secret=', warSecret);
-            }
-            const warXHR = new safe.XMLHttpRequest();
-            warXHR.responseType = 'text';
-            warXHR.onloadend = ev => {
-                resolve(ev.target.responseText || '');
-            };
-            warXHR.open('GET', fullpath.join(''));
-            warXHR.send();
-        }).catch(( ) => '');
-    }
-    if ( directive.startsWith('join:') ) {
-        const parts = directive.slice(7)
-                .split(directive.slice(5, 7))
-                .map(a => generateContentFn(trusted, a));
-        return parts.some(a => a instanceof Promise)
-            ? Promise.all(parts).then(parts => parts.join(''))
-            : parts.join('');
-    }
-    if ( trusted ) {
-        return directive;
-    }
-    return '';
-}
-
 function getExceptionTokenFn() {
     const token = getRandomTokenFn();
     const oe = self.onerror;
@@ -1061,56 +721,6 @@ function getRandomTokenFn() {
     const safe = safeSelf();
     return safe.String_fromCharCode(Date.now() % 26 + 97) +
         safe.Math_floor(safe.Math_random() * 982451653 + 982451653).toString(36);
-}
-
-function jsonEditFetchRequestFn(trusted, jsonq = '', ...varargs) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}json-edit-fetch-request`,
-        jsonq
-    );
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
-    const filterBody = body => {
-        if ( typeof body !== 'string' ) { return; }
-        let data;
-        try { data = safe.JSON_parse(body); }
-        catch { }
-        if ( data instanceof Object === false ) { return; }
-        const objAfter = jsonp.apply(data);
-        if ( objAfter === undefined ) { return; }
-        return safe.JSON_stringify(objAfter);
-    }
-    const proxyHandler = context => {
-        const args = context.callArgs;
-        const [ resource, options ] = args;
-        const bodyBefore = options?.body;
-        if ( Boolean(bodyBefore) === false ) { return context.reflect(); }
-        const bodyAfter = filterBody(bodyBefore);
-        if ( bodyAfter === undefined || bodyAfter === bodyBefore ) {
-            return context.reflect();
-        }
-        if ( propNeedles.size !== 0 ) {
-            const props = collateFetchArgumentsFn(resource, options);
-            const matched = matchObjectPropertiesFn(propNeedles, props);
-            if ( matched === undefined ) { return context.reflect(); }
-            if ( safe.logLevel > 1 ) {
-                safe.uboLog(logPrefix, `Matched "propsToMatch":\n\t${matched.join('\n\t')}`);
-            }
-        }
-        safe.uboLog(logPrefix, 'Edited');
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, `After edit:\n${bodyAfter}`);
-        }
-        options.body = bodyAfter;
-        return context.reflect();
-    };
-    proxyApplyFn('fetch', proxyHandler);
-    proxyApplyFn('Request', proxyHandler);
 }
 
 function jsonEditFetchResponse(jsonq = '', ...args) {
@@ -1168,101 +778,6 @@ function jsonEditFetchResponseFn(trusted, jsonq = '', ...varargs) {
             return fetchPromise;
         });
     });
-}
-
-function jsonEditFn(trusted = false, jsonq = '', ...varargs) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}json-edit`,
-        jsonq,
-        ...varargs
-    );
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const extraArgs = safe.parseVarargs(varargs);
-    const pattern = extraArgs.matches && safe.initPattern(extraArgs.matches);
-    proxyApplyFn('JSON.parse', function(context) {
-        const json = context.callArgs[0];
-        const obj = context.reflect();
-        if ( pattern && safe.testPattern(pattern, json) === false ) { return obj; }
-        const objAfter = jsonp.apply(obj);
-        if ( objAfter === undefined ) { return obj; }
-        safe.uboLog(logPrefix, 'Edited');
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, `After edit:\n${safe.JSON_stringify(objAfter, null, 2)}`);
-        }
-        return objAfter;
-    });
-}
-
-function jsonEditXhrResponseFn(trusted, jsonq = '', ...varargs) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}json-edit-xhr-response`,
-        jsonq
-    );
-    const xhrInstances = new WeakMap();
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
-    self.XMLHttpRequest = class extends self.XMLHttpRequest {
-        open(method, url, ...args) {
-            const xhrDetails = { method, url };
-            const matched = propNeedles.size === 0 ||
-                matchObjectPropertiesFn(propNeedles, xhrDetails);
-            if ( matched ) {
-                if ( safe.logLevel > 1 && Array.isArray(matched) ) {
-                    safe.uboLog(logPrefix, `Matched "propsToMatch":\n\t${matched.join('\n\t')}`);
-                }
-                xhrInstances.set(this, xhrDetails);
-            }
-            return super.open(method, url, ...args);
-        }
-        get response() {
-            const innerResponse = super.response;
-            const xhrDetails = xhrInstances.get(this);
-            if ( xhrDetails === undefined ) { return innerResponse; }
-            const responseLength = typeof innerResponse === 'string'
-                ? innerResponse.length
-                : undefined;
-            if ( xhrDetails.lastResponseLength !== responseLength ) {
-                xhrDetails.response = undefined;
-                xhrDetails.lastResponseLength = responseLength;
-            }
-            if ( xhrDetails.response !== undefined ) {
-                return xhrDetails.response;
-            }
-            let obj;
-            if ( typeof innerResponse === 'object' ) {
-                obj = innerResponse;
-            } else if ( typeof innerResponse === 'string' ) {
-                try { obj = safe.JSON_parse(innerResponse); } catch { }
-            }
-            if ( typeof obj !== 'object' || obj === null ) {
-                return (xhrDetails.response = innerResponse);
-            }
-            const objAfter = jsonp.apply(obj);
-            if ( objAfter === undefined ) {
-                return (xhrDetails.response = innerResponse);
-            }
-            safe.uboLog(logPrefix, 'Edited');
-            const outerResponse = typeof innerResponse === 'string'
-                ? JSONPath.toJSON(objAfter, safe.JSON_stringify)
-                : objAfter;
-            return (xhrDetails.response = outerResponse);
-        }
-        get responseText() {
-            const response = this.response;
-            return typeof response !== 'string'
-                ? super.responseText
-                : response;
-        }
-    };
 }
 
 function jsonPrune(
@@ -1443,103 +958,6 @@ function jsonPruneXhrResponse(
     };
 }
 
-function jsonlEditFn(jsonp, text = '', jsonExtract) {
-    const safe = safeSelf();
-    const lineSeparator = /\r?\n/.exec(text)?.[0] || '\n';
-    const linesBefore = text.split('\n');
-    const linesAfter = [];
-    for ( const lineBefore of linesBefore ) {
-        const match = jsonExtract.exec(lineBefore);
-        if ( match === null ) {
-            linesAfter.push(lineBefore);
-            continue;
-        }
-        const jsonBefore = match[1];
-        let obj;
-        try { obj = safe.JSON_parse(jsonBefore); } catch { }
-        if ( typeof obj !== 'object' || obj === null ) {
-            linesAfter.push(lineBefore);
-            continue;
-        }
-        const objAfter = jsonp.apply(obj);
-        if ( objAfter === undefined ) {
-            linesAfter.push(lineBefore);
-            continue;
-        }
-        const jsonAfter = safe.JSON_stringify(objAfter);
-        const lineAfter = [
-            lineBefore.slice(0, match.index),
-            jsonAfter,
-            lineBefore.slice(match.index + jsonBefore.length),
-        ].join('');
-        linesAfter.push(lineAfter);
-    }
-    return linesAfter.join(lineSeparator);
-}
-
-function jsonlEditXhrResponseFn(trusted, jsonq = '', ...varargs) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}jsonl-edit-xhr-response`,
-        jsonq
-    );
-    const xhrInstances = new WeakMap();
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(extraArgs.propsToMatch, 'url');
-    const jsonExtract = extraArgs.jsonExtract
-        ? new RegExp(extraArgs.jsonExtract)
-        : /^(.*)$/;
-    self.XMLHttpRequest = class extends self.XMLHttpRequest {
-        open(method, url, ...args) {
-            const xhrDetails = { method, url };
-            const matched = propNeedles.size === 0 ||
-                matchObjectPropertiesFn(propNeedles, xhrDetails);
-            if ( matched ) {
-                if ( safe.logLevel > 1 && Array.isArray(matched) ) {
-                    safe.uboLog(logPrefix, `Matched "propsToMatch":\n\t${matched.join('\n\t')}`);
-                }
-                xhrInstances.set(this, xhrDetails);
-            }
-            return super.open(method, url, ...args);
-        }
-        get response() {
-            const innerResponse = super.response;
-            const xhrDetails = xhrInstances.get(this);
-            if ( xhrDetails === undefined ) {
-                return innerResponse;
-            }
-            const responseLength = typeof innerResponse === 'string'
-                ? innerResponse.length
-                : undefined;
-            if ( xhrDetails.lastResponseLength !== responseLength ) {
-                xhrDetails.response = undefined;
-                xhrDetails.lastResponseLength = responseLength;
-            }
-            if ( xhrDetails.response !== undefined ) {
-                return xhrDetails.response;
-            }
-            if ( typeof innerResponse !== 'string' ) {
-                return (xhrDetails.response = innerResponse);
-            }
-            const outerResponse = jsonlEditFn(jsonp, innerResponse, jsonExtract);
-            if ( outerResponse !== innerResponse ) {
-                safe.uboLog(logPrefix, 'Pruned');
-            }
-            return (xhrDetails.response = outerResponse);
-        }
-        get responseText() {
-            const response = this.response;
-            return typeof response !== 'string'
-                ? super.responseText
-                : response;
-        }
-    };
-}
-
 function matchObjectPropertiesFn(propNeedles, ...objs) {
     const safe = safeSelf();
     const matched = [];
@@ -1603,194 +1021,6 @@ function matchesStackTraceFn(
         safe.uboLog(stack.replace(/\t/g, '\n'));
     }
     return r;
-}
-
-function modifyXhrResponseFn(
-    propsToMatch = '',
-    modifierFn = ''
-) {
-    if ( typeof propsToMatch !== 'string' ) { return; }
-    const safe = safeSelf();
-    if ( modifyXhrResponseFn.xhrInstances === undefined ) {
-        modifyXhrResponseFn.xhrInstances = new WeakMap();
-    }
-    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
-    const NativeXMLHttpRequest = self.XMLHttpRequest;
-    const TrappedXMLHttpRequest = class XMLHttpRequest extends NativeXMLHttpRequest {
-        open(method, url, ...args) {
-            const haystack = { method, url };
-            if ( propsToMatch === '' ) {
-                safe.uboLog(`modifyXhrResponseFn() / Called: ${safe.JSON_stringify(haystack, null, 2)}`);
-            } else if ( matchObjectPropertiesFn(propNeedles, haystack) ) {
-                modifyXhrResponseFn.xhrInstances.set(this, modifierFn);
-            }
-            return super.open(method, url, ...args);
-        }
-        get response() {
-            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
-            return modifierFn
-                ? modifierFn(this, super.response)
-                : super.response;
-        }
-        get responseText() {
-            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
-            return modifierFn
-                ? modifierFn(this, super.responseText)
-                : super.responseText;
-        }
-        get responseXML() {
-            const modifierFn = modifyXhrResponseFn.xhrInstances.get(this);
-            return modifierFn
-                ? modifierFn(this, super.responseXML)
-                : super.responseXML;
-        }
-    };
-    proxyToStringFn(TrappedXMLHttpRequest.prototype.open, NativeXMLHttpRequest.prototype.open);
-    proxyToStringFn(TrappedXMLHttpRequest, NativeXMLHttpRequest);
-    self.XMLHttpRequest = TrappedXMLHttpRequest;
-}
-
-function mpegdashPrune(
-    selector = '',
-    propsToMatch = ''
-) {
-    if ( typeof selector !== 'string' ) { return; }
-    if ( selector === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('mpegdash-prune', selector, propsToMatch);
-    const queryAll = (xmlDoc, selector) => {
-        if ( selector.startsWith('xpath:') === false ) {
-            return Array.from(xmlDoc.querySelectorAll(selector));
-        }
-        const xpr = xmlDoc.evaluate(
-            selector.slice(6),
-            xmlDoc,
-            null,
-            XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
-            null
-        );
-        const out = [];
-        for ( let i = 0; i < xpr.snapshotLength; i++ ) {
-            const node = xpr.snapshotItem(i);
-            out.push(node);
-        }
-        return out;
-    };
-    const rePTparse = /^PT(\d+D)?(\d+H)?(\d+M)?([\d.]+S)?$/;
-    const secondsPerDay = 24 * 60 * 60;
-    const secondsPerHour = 60 * 60;
-    const secondsPerMinute = 60;
-    const secondsFromPT = pt => {
-        const match = rePTparse.exec(pt);
-        if ( match === null ) { return; }
-        let seconds = 0;
-        if ( match[1] ) {
-            const d = parseFloat(match[1].slice(0, -1));
-            if ( isNaN(d) ) { return; }
-            seconds += d * secondsPerDay;
-        }
-        if ( match[2] ) {
-            const h = parseFloat(match[2].slice(0, -1));
-            if ( isNaN(h) ) { return; }
-            seconds += h * secondsPerHour;
-        }
-        if ( match[3] ) {
-            const m = parseFloat(match[3].slice(0, -1));
-            if ( isNaN(m) ) { return; }
-            seconds += m * secondsPerMinute;
-        }
-        if ( match[4] ) {
-            const s = parseFloat(match[4].slice(0, -1));
-            if ( isNaN(s) ) { return; }
-            seconds += s;
-        }
-        return seconds;
-    };
-    const ptFromSeconds = seconds => {
-        const parts = [ 'PT' ];
-        const d = Math.floor(seconds / secondsPerDay);
-        if ( d ) {
-            parts.push(`${d}D`);
-            seconds -= d * secondsPerDay;
-        }
-        const h = Math.floor(seconds / secondsPerHour);
-        if ( h ) {
-            parts.push(`${h}H`);
-            seconds -= h * secondsPerHour;
-        }
-        const m = Math.floor(seconds / secondsPerMinute);
-        if ( m ) {
-            parts.push(`${m}M`);
-            seconds -= m * secondsPerMinute;
-        }
-        parts.push(`${seconds}S`);
-        return parts.join('');
-    };
-    const fixTimeAttributes = xmlDoc => {
-        try {
-            const periods = queryAll(xmlDoc, 'MPD > Period');
-            if ( periods.length === 0 ) { return; }
-            let seconds = 0;
-            for ( const period of periods ) {
-                const startAttrBefore = period.getAttribute('start');
-                const durAttr = period.getAttribute('duration');
-                if ( startAttrBefore === null || durAttr === null ) { continue; }
-                const startAttrAfter = ptFromSeconds(seconds);
-                period.setAttribute('start', startAttrAfter);
-                if ( period.hasAttribute('id') ) {
-                    const idAttr = period.getAttribute('id');
-                    period.setAttribute('id', idAttr.replace(startAttrBefore, startAttrAfter));
-                }
-                seconds += secondsFromPT(durAttr);
-            }
-            const mpds = queryAll(xmlDoc, 'MPD[mediaPresentationDuration]');
-            if ( mpds.length !== 1 ) { return; }
-            mpds[0].setAttribute('mediaPresentationDuration', ptFromSeconds(seconds));
-        } catch {
-        }
-    };
-    const pruneFromDoc = xmlDoc => {
-        try {
-            if ( selector === '' ) {
-                const serializer = new XMLSerializer();
-                safe.uboLog(logPrefix, `Document is\n\t${serializer.serializeToString(xmlDoc)}`);
-            }
-            const items = queryAll(xmlDoc, selector);
-            if ( items.length === 0 ) { return xmlDoc; }
-            safe.uboLog(logPrefix, `Patching ${items.length} items`);
-            for ( const item of items ) {
-                if ( item.nodeType !== 1 ) { continue; }
-                item.setAttribute('duration', 'PT0S');
-            }
-            fixTimeAttributes(xmlDoc);
-        } catch(ex) {
-            safe.uboErr(logPrefix, `Error: ${ex}`);
-        }
-        return xmlDoc;
-    };
-    const pruneFromText = text => {
-        if ( (/^\s*</.test(text) && />\s*$/.test(text)) === false ) {
-            return text;
-        }
-        try {
-            const xmlParser = new DOMParser();
-            const xmlDoc = xmlParser.parseFromString(text, 'text/xml');
-            pruneFromDoc(xmlDoc);
-            const serializer = new XMLSerializer();
-            text = serializer.serializeToString(xmlDoc);
-        } catch {
-        }
-        return text;
-    };
-    modifyXhrResponseFn(propsToMatch, (xhr, before) => {
-        if ( before instanceof XMLDocument ) {
-            return pruneFromDoc(before);
-        }
-        if ( typeof before === 'string' ) {
-            return pruneFromText(before);
-        }
-        return before;
-    });
 }
 
 function objectFindOwnerFn(
@@ -1900,20 +1130,6 @@ function objectPruneFn(
     if ( outcome === 'match' ) { return obj; }
 }
 
-function offIdleFn(id) {
-    if ( self.requestIdleCallback ) {
-        return self.cancelIdleCallback(id);
-    }
-    return self.cancelAnimationFrame(id);
-}
-
-function onIdleFn(fn, options) {
-    if ( self.requestIdleCallback ) {
-        return self.requestIdleCallback(fn, options);
-    }
-    return self.requestAnimationFrame(fn);
-}
-
 function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
     const safe = safeSelf();
     const needles = new Map();
@@ -1933,278 +1149,6 @@ function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
         }
     }
     return needles;
-}
-
-function parseReplaceFn(s) {
-    if ( s.charCodeAt(0) !== 0x2F /* / */ ) { return; }
-    const parser = new ArglistParser('/');
-    parser.nextArg(s, 1);
-    let pattern = s.slice(parser.argBeg, parser.argEnd);
-    if ( parser.transform ) {
-        pattern = parser.normalizeArg(pattern);
-    }
-    if ( pattern === '' ) { return; }
-    parser.nextArg(s, parser.separatorEnd);
-    let replacement = s.slice(parser.argBeg, parser.argEnd);
-    if ( parser.separatorEnd === parser.separatorBeg ) { return; }
-    if ( parser.transform ) {
-        replacement = parser.normalizeArg(replacement);
-    }
-    const flags = s.slice(parser.separatorEnd);
-    try {
-        return { re: new RegExp(pattern, flags), replacement };
-    } catch {
-    }
-}
-
-function preventFetchFn(
-    trusted = false,
-    propsToMatch = '',
-    responseBody = '',
-    responseType = '',
-    ...varargs
-) {
-    const safe = safeSelf();
-    const setTimeout = self.setTimeout;
-    const scriptletName = `${trusted ? 'trusted-' : ''}prevent-fetch`;
-    const logPrefix = safe.makeLogPrefix(
-        scriptletName,
-        propsToMatch,
-        responseBody,
-        responseType
-    );
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
-    const validResponseProps = {
-        ok: [ false, true ],
-        status: [ 403 ],
-        statusText: [ '', 'Not Found' ],
-        type: [ 'basic', 'cors', 'default', 'error', 'opaque' ],
-    };
-    const responseProps = {
-        statusText: { value: 'OK' },
-    };
-    const responseHeaders = {};
-    if ( /^\{.*\}$/.test(responseType) ) {
-        try {
-            Object.entries(JSON.parse(responseType)).forEach(([ p, v ]) => {
-                if ( p === 'headers' && trusted ) {
-                    Object.assign(responseHeaders, v);
-                    return;
-                }
-                if ( validResponseProps[p] === undefined ) { return; }
-                if ( validResponseProps[p].includes(v) === false ) { return; }
-                responseProps[p] = { value: v };
-            });
-        }
-        catch { }
-    } else if ( responseType !== '' ) {
-        if ( validResponseProps.type.includes(responseType) ) {
-            responseProps.type = { value: responseType };
-        }
-    }
-    proxyApplyFn('fetch', function fetch(context) {
-        const { callArgs } = context;
-        const details = collateFetchArgumentsFn(...callArgs);
-        if ( safe.logLevel > 1 || propsToMatch === '' && responseBody === '' ) {
-            const out = Array.from(Object.entries(details)).map(a => `${a[0]}:${a[1]}`);
-            safe.uboLog(logPrefix, `Called: ${out.join('\n')}`);
-        }
-        if ( propsToMatch === '' && responseBody === '' ) {
-            return context.reflect();
-        }
-        const matched = matchObjectPropertiesFn(propNeedles, details);
-        if ( matched === undefined || matched.length === 0 ) {
-            return context.reflect();
-        }
-        return Promise.resolve(generateContentFn(trusted, responseBody)).then(text => {
-            safe.uboLog(logPrefix, `Prevented with response "${text}"`);
-            const headers = Object.assign({}, responseHeaders);
-            if ( headers['content-length'] === undefined ) {
-                headers['content-length'] = text.length;
-            }
-            const response = new Response(text, { headers });
-            const props = Object.assign(
-                { url: { value: details.url } },
-                responseProps
-            );
-            safe.Object_defineProperties(response, props);
-            if ( extraArgs.throttle ) {
-                return new Promise(resolve => {
-                    setTimeout(( ) => { resolve(response); }, extraArgs.throttle);
-                });
-            }
-            return response;
-        });
-    });
-}
-
-function preventXhrFn(
-    trusted = false,
-    propsToMatch = '',
-    directive = ''
-) {
-    if ( typeof propsToMatch !== 'string' ) { return; }
-    const safe = safeSelf();
-    const scriptletName = trusted ? 'trusted-prevent-xhr' : 'prevent-xhr';
-    const logPrefix = safe.makeLogPrefix(scriptletName, propsToMatch, directive);
-    const xhrInstances = new WeakMap();
-    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
-    const warOrigin = scriptletGlobals.warOrigin;
-    const safeDispatchEvent = (xhr, type) => {
-        try {
-            xhr.dispatchEvent(new Event(type));
-        } catch {
-        }
-    };
-    proxyApplyFn('XMLHttpRequest.prototype.open', function(context) {
-        const { thisArg, callArgs } = context;
-        xhrInstances.delete(thisArg);
-        const [ method, url, ...args ] = callArgs;
-        if ( warOrigin !== undefined && url.startsWith(warOrigin) ) {
-            return context.reflect();
-        }
-        const haystack = { method, url };
-        if ( propsToMatch === '' && directive === '' ) {
-            safe.uboLog(logPrefix, `Called: ${safe.JSON_stringify(haystack, null, 2)}`);
-            return context.reflect();
-        }
-        if ( matchObjectPropertiesFn(propNeedles, haystack) ) {
-            const xhrDetails = Object.assign(haystack, {
-                xhr: thisArg,
-                defer: args.length === 0 || !!args[0],
-                directive,
-                headers: {
-                    'date': '',
-                    'content-type': '',
-                    'content-length': '',
-                },
-                url: haystack.url,
-                props: {
-                    response: { value: '' },
-                    responseText: { value: '' },
-                    responseXML: { value: null },
-                },
-            });
-            xhrInstances.set(thisArg, xhrDetails);
-        }
-        return context.reflect();
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.send', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined ) {
-            return context.reflect();
-        }
-        xhrDetails.headers['date'] = (new Date()).toUTCString();
-        let xhrText = '';
-        switch ( thisArg.responseType ) {
-        case 'arraybuffer':
-            xhrDetails.props.response.value = new ArrayBuffer(0);
-            xhrDetails.headers['content-type'] = 'application/octet-stream';
-            break;
-        case 'blob':
-            xhrDetails.props.response.value = new Blob([]);
-            xhrDetails.headers['content-type'] = 'application/octet-stream';
-            break;
-        case 'document': {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString('', 'text/html');
-            xhrDetails.props.response.value = doc;
-            xhrDetails.props.responseXML.value = doc;
-            xhrDetails.headers['content-type'] = 'text/html';
-            break;
-        }
-        case 'json':
-            xhrDetails.props.response.value = {};
-            xhrDetails.props.responseText.value = '{}';
-            xhrDetails.headers['content-type'] = 'application/json';
-            break;
-        default: {
-            if ( directive === '' ) { break; }
-            xhrText = generateContentFn(trusted, xhrDetails.directive);
-            if ( xhrText instanceof Promise ) {
-                xhrText = xhrText.then(text => {
-                    xhrDetails.props.response.value = text;
-                    xhrDetails.props.responseText.value = text;
-                });
-            } else {
-                xhrDetails.props.response.value = xhrText;
-                xhrDetails.props.responseText.value = xhrText;
-            }
-            xhrDetails.headers['content-type'] = 'text/plain';
-            break;
-        }
-        }
-        if ( xhrDetails.defer === false ) {
-            xhrDetails.headers['content-length'] = `${xhrDetails.props.response.value}`.length;
-            Object.defineProperties(xhrDetails.xhr, {
-                readyState: { value: 4 },
-                responseURL: { value: xhrDetails.url },
-                status: { value: 200 },
-                statusText: { value: 'OK' },
-            });
-            Object.defineProperties(xhrDetails.xhr, xhrDetails.props);
-            return;
-        }
-        Promise.resolve(xhrText).then(( ) => xhrDetails).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 1, configurable: true },
-                responseURL: { value: xhrDetails.url },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            xhrDetails.headers['content-length'] = `${details.props.response.value}`.length;
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 2, configurable: true },
-                status: { value: 200 },
-                statusText: { value: 'OK' },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 3, configurable: true },
-            });
-            Object.defineProperties(details.xhr, details.props);
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 4 },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            safeDispatchEvent(details.xhr, 'load');
-            safeDispatchEvent(details.xhr, 'loadend');
-            safe.uboLog(logPrefix, `Prevented with response:\n${details.xhr.response}`);
-        });
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.getResponseHeader', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined || thisArg.readyState < thisArg.HEADERS_RECEIVED ) {
-            return context.reflect();
-        }
-        const headerName = `${context.callArgs[0]}`;
-        const value = xhrDetails.headers[headerName.toLowerCase()];
-        if ( value !== undefined && value !== '' ) { return value; }
-        return null;
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.getAllResponseHeaders', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined || thisArg.readyState < thisArg.HEADERS_RECEIVED ) {
-            return context.reflect();
-        }
-        const out = [];
-        for ( const [ name, value ] of Object.entries(xhrDetails.headers) ) {
-            if ( !value ) { continue; }
-            out.push(`${name}: ${value}`);
-        }
-        if ( out.length !== 0 ) { out.push(''); }
-        return out.join('\r\n');
-    });
 }
 
 function proxyApplyFn(
@@ -2306,27 +1250,6 @@ function proxyApplyFn(
     context[prop] = proxiedTarget;
 }
 
-function proxyToStringFn(proxiedFn, nativeFn) {
-    if ( proxyToStringFn.proxies === undefined ) {
-        proxyToStringFn.proxies = new WeakMap();
-        proxyToStringFn.nativeToString = Function.prototype.toString;
-        const proxiedToString = new Proxy(Function.prototype.toString, {
-            apply(target, thisArg) {
-                let proxied = thisArg;
-                for(;;) {
-                    const fn = proxyToStringFn.proxies.get(proxied);
-                    if ( fn === undefined ) { break; }
-                    proxied = fn;
-                }
-                return proxyToStringFn.nativeToString.call(proxied);
-            }
-        });
-        proxyToStringFn.proxies.set(proxiedToString, proxyToStringFn.nativeToString);
-        Function.prototype.toString = proxiedToString;
-    }
-    proxyToStringFn.proxies.set(proxiedFn, nativeFn);
-}
-
 function replaceFetchResponseFn(
     trusted = false,
     pattern = '',
@@ -2414,18 +1337,6 @@ function runAt(fn, when) {
     const safe = safeSelf();
     const args = [ 'readystatechange', onStateChange, { capture: true } ];
     safe.addEventListener.apply(document, args);
-}
-
-function runAtHtmlElementFn(fn) {
-    if ( document.documentElement ) {
-        fn();
-        return;
-    }
-    const observer = new MutationObserver(( ) => {
-        observer.disconnect();
-        fn();
-    });
-    observer.observe(document, { childList: true });
 }
 
 function safeSelf() {
@@ -2760,79 +1671,6 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function trapPropertyFn(propChain, handler, options = {}) {
-    if ( propChain === '' ) { return; }
-    let owner = self;
-    let prop = propChain;
-    for (;;) {
-        const pos = prop.indexOf('.');
-        if ( pos === -1 ) { break; }
-        owner = owner[prop.slice(0, pos)];
-        if ( owner instanceof Object === false ) { return; }
-        prop = prop.slice(pos + 1);
-    }
-    const safe = safeSelf();
-    if ( trapPropertyFn.db === undefined ) {
-        trapPropertyFn.db = new WeakMap();
-        trapPropertyFn.entryFromContext = (owner, prop) => {
-            const handlers = trapPropertyFn.db.get(owner);
-            return handlers?.get(prop);
-        };
-        trapPropertyFn.getter = (owner, prop) => {
-            const entry = trapPropertyFn.entryFromContext(owner, prop);
-            if ( entry === undefined ) { return; }
-            let r = entry.value;
-            for ( const desc of entry.stack ) {
-                try { r = desc.get(); } catch (e) {
-                    if ( entry.canThrow ) { throw e; }
-                }
-            }
-            return r;
-        };
-        trapPropertyFn.setter = (owner, prop, value) => {
-            const entry = trapPropertyFn.entryFromContext(owner, prop);
-            if ( entry === undefined ) { return; }
-            entry.value = value;
-            for ( const desc of entry.stack ) {
-                try { desc.set(value); } catch (e) {
-                    if ( entry.canThrow ) { throw e; }
-                }
-            }
-        };
-    }
-    const { db } = trapPropertyFn;
-    const handlers = db.get(owner) || new Map();
-    if ( handlers.size === 0 ) {
-        db.set(owner, handlers);
-    }
-    const entry = handlers.get(prop) || {
-        value: owner[prop],
-        stack: [],
-    };
-    entry.stack.push(handler);
-    if ( entry.stack.length > 1 ) { return entry.value; }
-    Object.assign(entry, options);
-    handlers.set(prop, entry);
-    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
-    if ( desc instanceof safe.Object ) {
-        if ( desc.get || desc.set ) {
-            entry.stack.push(desc);
-        }
-    }
-    try {
-        safe.Object_defineProperty(owner, prop, {
-            get() {
-                return trapPropertyFn.getter(owner, prop);
-            },
-            set(value) {
-                trapPropertyFn.setter(owner, prop, value);
-            }
-        });
-    } catch {
-    }
-    return entry.value;
-}
-
 function trustedEditInboundObject(propChain = '', argPos = '', jsonq = '') {
     editInboundObjectFn(true, propChain, argPos, jsonq);
 }
@@ -3005,751 +1843,74 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
     return value;
 }
 
-function xmlPrune(
-    selector = '',
-    selectorCheck = '',
-    urlPattern = '',
-    ...varargs
-) {
-    if ( typeof selector !== 'string' ) { return; }
-    if ( selector === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('xml-prune', selector, selectorCheck, urlPattern);
-    const reUrl = safe.patternToRegex(urlPattern);
-    const extraArgs = safe.parseVarargs(varargs);
-    const queryAll = (xmlDoc, selector) => {
-        const isXpath = /^xpath\(.+\)$/.test(selector);
-        if ( isXpath === false ) {
-            return Array.from(xmlDoc.querySelectorAll(selector));
+/******************************************************************************/
+
+scriptletGlobals.origins = (( ) => {
+    const docloc = document.location;
+    const origins = [ docloc.origin ];
+    if ( docloc.ancestorOrigins ) {
+        origins.push(...docloc.ancestorOrigins);
+    }
+    const out = [];
+    for ( let i = 0; i < origins.length; i++ ) {
+        const origin = origins[i];
+        const beg = origin.indexOf('://') + 3;
+        if ( beg === 2 ) { continue; }
+        const end = origin.indexOf(':', beg);
+        const hn = origin.slice(beg, end > 0 ? end : undefined);
+        if ( hn.length === 0 ) { continue; }
+        const hns = [ hn ];
+        for ( let pos = 0; ; ) {
+            pos = hn.indexOf('.', pos) + 1;
+            if ( pos === 0 ) { break; }
+            hns.push(hn.slice(pos));
         }
-        const xpr = xmlDoc.evaluate(
-            selector.slice(6, -1),
-            xmlDoc,
-            null,
-            XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
-            null
-        );
-        const out = [];
-        for ( let i = 0; i < xpr.snapshotLength; i++ ) {
-            const node = xpr.snapshotItem(i);
-            out.push(node);
-        }
-        return out;
-    };
-    const pruneFromDoc = xmlDoc => {
-        try {
-            if ( selectorCheck !== '' && xmlDoc.querySelector(selectorCheck) === null ) {
-                return xmlDoc;
+        hns.push('*');
+        const ens = [];
+        for ( let hn of hns ) {
+            for (;;) {
+                const pos = hn.lastIndexOf('.');
+                if ( pos === -1 ) { break; }
+                hn = hn.slice(0, pos);
+                ens.push(`${hn}.*`);
             }
-            if ( extraArgs.logdoc ) {
-                const serializer = new XMLSerializer();
-                safe.uboLog(logPrefix, `Document is\n\t${serializer.serializeToString(xmlDoc)}`);
-            }
-            const items = queryAll(xmlDoc, selector);
-            if ( items.length === 0 ) { return xmlDoc; }
-            safe.uboLog(logPrefix, `Removing ${items.length} items`);
-            for ( const item of items ) {
-                if ( item.nodeType === 1 ) {
-                    item.remove();
-                } else if ( item.nodeType === 2 ) {
-                    item.ownerElement.removeAttribute(item.nodeName);
-                }
-                safe.uboLog(logPrefix, `${item.constructor.name}.${item.nodeName} removed`);
-            }
-        } catch(ex) {
-            safe.uboErr(logPrefix, `Error: ${ex}`);
         }
-        return xmlDoc;
-    };
-    const pruneFromText = text => {
-        if ( (/^\s*</.test(text) && />\s*$/.test(text)) === false ) {
-            return text;
-        }
-        try {
-            const xmlParser = new DOMParser();
-            const xmlDoc = xmlParser.parseFromString(text, 'text/xml');
-            pruneFromDoc(xmlDoc);
-            const serializer = new XMLSerializer();
-            text = serializer.serializeToString(xmlDoc);
-        } catch {
-        }
-        return text;
-    };
-    const urlFromArg = arg => {
-        if ( typeof arg === 'string' ) { return arg; }
-        if ( arg instanceof Request ) { return arg.url; }
-        return String(arg);
-    };
-    self.fetch = new Proxy(self.fetch, {
-        apply: function(target, thisArg, args) {
-            const fetchPromise = Reflect.apply(target, thisArg, args);
-            if ( reUrl.test(urlFromArg(args[0])) === false ) {
-                return fetchPromise;
-            }
-            return fetchPromise.then(responseBefore => {
-                const response = responseBefore.clone();
-                return response.text().then(text => {
-                    const responseAfter = new Response(pruneFromText(text), {
-                        status: responseBefore.status,
-                        statusText: responseBefore.statusText,
-                        headers: responseBefore.headers,
-                    });
-                    Object.defineProperties(responseAfter, {
-                        ok: { value: responseBefore.ok },
-                        redirected: { value: responseBefore.redirected },
-                        type: { value: responseBefore.type },
-                        url: { value: responseBefore.url },
-                    });
-                    return responseAfter;
-                }).catch(( ) =>
-                    responseBefore
-                );
-            });
-        }
-    });
-    modifyXhrResponseFn(urlPattern, (xhr, before) => {
-        if ( before instanceof XMLDocument ) {
-            return pruneFromDoc(before);
-        }
-        if ( typeof before === 'string' ) {
-            return pruneFromText(before);
-        }
-        return before;
-    });
-}
+        ens.sort((a, b) => {
+            const d = b.length - a.length;
+            if ( d !== 0 ) { return d; }
+            return a > b ? -1 : 1;
+        });
+        out.push({ hns, ens, i });
+    }
+    return out;
+})();
 
-function zeta_j7s0f4ys() { // google-ima.js
-'use strict';
-
-
-
-
-
-if (!window.google || !window.google.ima || !window.google.ima.VERSION) {
-  const VERSION = "3.764.0";
-  const ima = {};
-
-  class AdDisplayContainer {
-    constructor(containerElement) {
-      const divElement = document.createElement("div");
-      divElement.style.setProperty("display", "none", "important");
-      divElement.style.setProperty("visibility", "collapse", "important");
-      containerElement.appendChild(divElement);
-    }
-    destroy() {}
-    initialize() {}
-  }
-
-  class ImaSdkSettings {
-    constructor() {
-      this.c = true;
-      this.f = {};
-      this.i = false;
-      this.l = "";
-      this.p = "";
-      this.r = 0;
-      this.t = "";
-      this.v = "";
-    }
-    getCompanionBackfill() {}
-    getDisableCustomPlaybackForIOS10Plus() {
-      return this.i;
-    }
-    getFeatureFlags() {
-      return this.f;
-    }
-    getLocale() {
-      return this.l;
-    }
-    getNumRedirects() {
-      return this.r;
-    }
-    getPlayerType() {
-      return this.t;
-    }
-    getPlayerVersion() {
-      return this.v;
-    }
-    getPpid() {
-      return this.p;
-    }
-    isCookiesEnabled() {
-      return this.c;
-    }
-    setAutoPlayAdBreaks() {}
-    setCompanionBackfill() {}
-    setCookiesEnabled(c) {
-      this.c = !!c;
-    }
-    setDisableCustomPlaybackForIOS10Plus(i) {
-      this.i = !!i;
-    }
-    setFeatureFlags(f) {
-      this.f = f;
-    }
-    setLocale(l) {
-      this.l = l;
-    }
-    setNumRedirects(r) {
-      this.r = r;
-    }
-    setPlayerType(t) {
-      this.t = t;
-    }
-    setPlayerVersion(v) {
-      this.v = v;
-    }
-    setPpid(p) {
-      this.p = p;
-    }
-    setSessionId() {}
-    setVpaidAllowed() {}
-    setVpaidMode() {}
-
-    // https://github.com/uBlockOrigin/uBlock-issues/issues/2265#issuecomment-1637094149
-    getDisableFlashAds() {
-    }
-    setDisableFlashAds() {
-    }
-  }
-  ImaSdkSettings.CompanionBackfillMode = {
-    ALWAYS: "always",
-    ON_MASTER_AD: "on_master_ad",
-  };
-  ImaSdkSettings.VpaidMode = {
-    DISABLED: 0,
-    ENABLED: 1,
-    INSECURE: 2,
-  };
-
-  class EventHandler {
-    constructor() {
-      this.listeners = new Map();
-    }
-
-    _dispatch(e) {
-      let listeners = this.listeners.get(e.type);
-      listeners = listeners ? Array.from(listeners.values()) : [];
-      for (const listener of listeners) {
-        try {
-          listener(e);
-        } catch (r) {
-          console.error(r);
-        }
-      }
-    }
-
-    addEventListener(types, c, options, context) {
-      if (!Array.isArray(types)) {
-        types = [types];
-      }
-
-      for (const t of types) {
-        if (!this.listeners.has(t)) {
-          this.listeners.set(t, new Map());
-        }
-        this.listeners.get(t).set(c, c.bind(context || this));
-      }
-    }
-
-    removeEventListener(types, c) {
-      if (!Array.isArray(types)) {
-        types = [types];
-      }
-
-      for (const t of types) {
-        const typeSet = this.listeners.get(t);
-        if (typeSet) {
-          typeSet.delete(c);
-        }
-      }
-    }
-  }
-
-  class AdsLoader extends EventHandler {
-    constructor() {
-      super();
-      this.settings = new ImaSdkSettings();
-    }
-    contentComplete() {}
-    destroy() {}
-    getSettings() {
-      return this.settings;
-    }
-    getVersion() {
-      return VERSION;
-    }
-    requestAds(_r, _c) {
-      requestAnimationFrame(() => {
-        const { ADS_MANAGER_LOADED } = AdsManagerLoadedEvent.Type;
-        const event = new ima.AdsManagerLoadedEvent(ADS_MANAGER_LOADED, _r, _c);
-        this._dispatch(event);
-      });
-      const error = new ima.AdError(
-        "adPlayError",
-        1205, 1205,
-        "The browser prevented playback initiated without user interaction.",
-        _r, _c
-      );
-      requestAnimationFrame( () => {
-        this._dispatch(new ima.AdErrorEvent(error));
-      });
-    }
-  }
-
-  class AdsManager extends EventHandler {
-    constructor() {
-      super();
-      this.volume = 1;
-      this._enablePreloading = false;
-    }
-    collapse() {}
-    configureAdsManager() {}
-    destroy() {}
-    discardAdBreak() {}
-    expand() {}
-    focus() {}
-    getAdSkippableState() {
-      return false;
-    }
-    getCuePoints() {
-      return [0];
-    }
-    getCurrentAd() {
-      return currentAd;
-    }
-    getCurrentAdCuePoints() {
-      return [];
-    }
-    getRemainingTime() {
-      return 0;
-    }
-    getVolume() {
-      return this.volume;
-    }
-    init() {
-      if (this._enablePreloading) {
-        this._dispatch(new ima.AdEvent(AdEvent.Type.LOADED));
-      }
-    }
-    isCustomClickTrackingUsed() {
-      return false;
-    }
-    isCustomPlaybackUsed() {
-      return false;
-    }
-    pause() {}
-    requestNextAdBreak() {}
-    resize() {}
-    resume() {}
-    setVolume(v) {
-      this.volume = v;
-    }
-    skip() {}
-    start() {
-      requestAnimationFrame(() => {
-        for (const type of [
-          AdEvent.Type.LOADED,
-          AdEvent.Type.STARTED,
-          AdEvent.Type.CONTENT_PAUSE_REQUESTED,
-          AdEvent.Type.AD_BUFFERING,
-          AdEvent.Type.FIRST_QUARTILE,
-          AdEvent.Type.MIDPOINT,
-          AdEvent.Type.THIRD_QUARTILE,
-          AdEvent.Type.COMPLETE,
-          AdEvent.Type.ALL_ADS_COMPLETED,
-          AdEvent.Type.CONTENT_RESUME_REQUESTED,
-        ]) {
-          try {
-            this._dispatch(new ima.AdEvent(type));
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      });
-    }
-    stop() {}
-    updateAdsRenderingSettings() {}
-  }
-
-  class AdsRenderingSettings {}
-
-  class AdsRequest {
-    setAdWillAutoPlay() {}
-    setAdWillPlayMuted() {}
-    setContinuousPlayback() {}
-  }
-
-  class AdPodInfo {
-    getAdPosition() {
-      return 1;
-    }
-    getIsBumper() {
-      return false;
-    }
-    getMaxDuration() {
-      return -1;
-    }
-    getPodIndex() {
-      return 1;
-    }
-    getTimeOffset() {
-      return 0;
-    }
-    getTotalAds() {
-      return 1;
-    }
-  }
-
-  class Ad {
-    constructor() {
-      this._pi = new AdPodInfo();
-    }
-    getAdId() {
-      return "";
-    }
-    getAdPodInfo() {
-      return this._pi;
-    }
-    getAdSystem() {
-      return "";
-    }
-    getAdvertiserName() {
-      return "";
-    }
-    getApiFramework() {
-      return null;
-    }
-    getCompanionAds() {
-      return [];
-    }
-    getContentType() {
-      return "";
-    }
-    getCreativeAdId() {
-      return "";
-    }
-    getCreativeId() {
-      return "";
-    }
-    getDealId() {
-      return "";
-    }
-    getDescription() {
-      return "";
-    }
-    getDuration() {
-      return 8.5;
-    }
-    getHeight() {
-      return 0;
-    }
-    getMediaUrl() {
-      return null;
-    }
-    getMinSuggestedDuration() {
-      return -2;
-    }
-    getSkipTimeOffset() {
-      return -1;
-    }
-    getSurveyUrl() {
-      return null;
-    }
-    getTitle() {
-      return "";
-    }
-    getTraffickingParameters() {
-      return {};
-    }
-    getTraffickingParametersString() {
-      return "";
-    }
-    getUiElements() {
-      return [""];
-    }
-    getUniversalAdIdRegistry() {
-      return "unknown";
-    }
-    getUniversalAdIds() {
-      return [new UniversalAdIdInfo()];
-    }
-    getUniversalAdIdValue() {
-      return "unknown";
-    }
-    getVastMediaBitrate() {
-      return 0;
-    }
-    getVastMediaHeight() {
-      return 0;
-    }
-    getVastMediaWidth() {
-      return 0;
-    }
-    getWidth() {
-      return 0;
-    }
-    getWrapperAdIds() {
-      return [""];
-    }
-    getWrapperAdSystems() {
-      return [""];
-    }
-    getWrapperCreativeIds() {
-      return [""];
-    }
-    isLinear() {
-      return true;
-    }
-    isSkippable() {
-      return true;
-    }
-  }
-
-  class CompanionAd {
-    getAdSlotId() {
-      return "";
-    }
-    getContent() {
-      return "";
-    }
-    getContentType() {
-      return "";
-    }
-    getHeight() {
-      return 1;
-    }
-    getWidth() {
-      return 1;
-    }
-  }
-
-  class AdError {
-    constructor(type, code, vast, message, request, context) {
-      this.errorCode = code;
-      this.message = message;
-      this.type = type;
-      this.adsRequest = request;
-      this.userRequestContext = context;
-      this.vastErrorCode = vast;
-    }
-    getErrorCode() {
-      return this.errorCode;
-    }
-    getInnerError() {
-        return null;
-    }
-    getMessage() {
-      return this.message;
-    }
-    getType() {
-      return this.type;
-    }
-    getVastErrorCode() {
-      return this.vastErrorCode;
-    }
-    toString() {
-      return `AdError ${this.errorCode}: ${this.message}`;
-    }
-  }
-  AdError.ErrorCode = {};
-  AdError.Type = {};
-
-  const isEngadget = () => {
-    try {
-      for (const ctx of Object.values(window.vidible._getContexts())) {
-        const player = ctx.getPlayer();
-        if (!player) { continue;}
-        const div = player.div;
-        if (!div) { continue; }
-        if (div.innerHTML.includes("www.engadget.com")) {
-          return true;
-        }
-      }
-    } catch {
-    }
-    return false;
-  };
-
-  const currentAd = isEngadget() ? undefined : new Ad();
-
-  class AdEvent {
-    constructor(type) {
-      this.type = type;
-    }
-    getAd() {
-      return currentAd;
-    }
-    getAdData() {
-      return {};
-    }
-  }
-  AdEvent.Type = {
-    AD_BREAK_READY: "adBreakReady",
-    AD_BUFFERING: "adBuffering",
-    AD_CAN_PLAY: "adCanPlay",
-    AD_METADATA: "adMetadata",
-    AD_PROGRESS: "adProgress",
-    ALL_ADS_COMPLETED: "allAdsCompleted",
-    CLICK: "click",
-    COMPLETE: "complete",
-    CONTENT_PAUSE_REQUESTED: "contentPauseRequested",
-    CONTENT_RESUME_REQUESTED: "contentResumeRequested",
-    DURATION_CHANGE: "durationChange",
-    EXPANDED_CHANGED: "expandedChanged",
-    FIRST_QUARTILE: "firstQuartile",
-    IMPRESSION: "impression",
-    INTERACTION: "interaction",
-    LINEAR_CHANGE: "linearChange",
-    LINEAR_CHANGED: "linearChanged",
-    LOADED: "loaded",
-    LOG: "log",
-    MIDPOINT: "midpoint",
-    PAUSED: "pause",
-    RESUMED: "resume",
-    SKIPPABLE_STATE_CHANGED: "skippableStateChanged",
-    SKIPPED: "skip",
-    STARTED: "start",
-    THIRD_QUARTILE: "thirdQuartile",
-    USER_CLOSE: "userClose",
-    VIDEO_CLICKED: "videoClicked",
-    VIDEO_ICON_CLICKED: "videoIconClicked",
-    VIEWABLE_IMPRESSION: "viewable_impression",
-    VOLUME_CHANGED: "volumeChange",
-    VOLUME_MUTED: "mute",
-  };
-
-  class AdErrorEvent {
-    constructor(error) {
-      this.type = "adError";
-      this.error = error;
-    }
-    getError() {
-      return this.error;
-    }
-    getUserRequestContext() {
-      return this.error?.userRequestContext || {};
-    }
-  }
-  AdErrorEvent.Type = {
-    AD_ERROR: "adError",
-  };
-
-  const manager = new AdsManager();
-
-  class AdsManagerLoadedEvent {
-    constructor(type, request, context) {
-      this.type = type;
-      this.adsRequest = request;
-      this.userRequestContext = context;
-    }
-    getAdsManager(c, settings) {
-      if (settings && settings.enablePreloading) {
-        manager._enablePreloading = true;
-      }
-      return manager;
-    }
-    getUserRequestContext() {
-      return this.userRequestContext || {};
-    }
-  }
-  AdsManagerLoadedEvent.Type = {
-    ADS_MANAGER_LOADED: "adsManagerLoaded",
-  };
-
-  class CustomContentLoadedEvent {}
-  CustomContentLoadedEvent.Type = {
-    CUSTOM_CONTENT_LOADED: "deprecated-event",
-  };
-
-  class CompanionAdSelectionSettings {}
-  CompanionAdSelectionSettings.CreativeType = {
-    ALL: "All",
-    FLASH: "Flash",
-    IMAGE: "Image",
-  };
-  CompanionAdSelectionSettings.ResourceType = {
-    ALL: "All",
-    HTML: "Html",
-    IFRAME: "IFrame",
-    STATIC: "Static",
-  };
-  CompanionAdSelectionSettings.SizeCriteria = {
-    IGNORE: "IgnoreSize",
-    SELECT_EXACT_MATCH: "SelectExactMatch",
-    SELECT_NEAR_MATCH: "SelectNearMatch",
-  };
-
-  class AdCuePoints {
-    getCuePoints() {
-      return [];
-    }
-  }
-
-  class AdProgressData {}
-
-  class UniversalAdIdInfo {
-    getAdIdRegistry() {
-      return "";
-    }
-    getAdIdValue() {
-      return "";
-    }
-  }
-
-  Object.assign(ima, {
-    AdCuePoints,
-    AdDisplayContainer,
-    AdError,
-    AdErrorEvent,
-    AdEvent,
-    AdPodInfo,
-    AdProgressData,
-    AdsLoader,
-    AdsManager: manager,
-    AdsManagerLoadedEvent,
-    AdsRenderingSettings,
-    AdsRequest,
-    CompanionAd,
-    CompanionAdSelectionSettings,
-    CustomContentLoadedEvent,
-    gptProxyInstance: {},
-    ImaSdkSettings,
-    OmidAccessMode: {
-      DOMAIN: "domain",
-      FULL: "full",
-      LIMITED: "limited",
-    },
-    OmidVerificationVendor: {
-      1: "OTHER",
-      2: "GOOGLE",
-      GOOGLE: 2,
-      OTHER: 1
-    },
-    settings: new ImaSdkSettings(),
-    UiElements: {
-      AD_ATTRIBUTION: "adAttribution",
-      COUNTDOWN: "countdown",
-    },
-    UniversalAdIdInfo,
-    VERSION,
-    ViewMode: {
-      FULLSCREEN: "fullscreen",
-      NORMAL: "normal",
-    },
-  });
-
-  if (!window.google) {
-    window.google = {};
-  }
-
-  window.google.ima = ima;
-}
-}
+scriptletGlobals.functionRefs = /* 30 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
 
 /******************************************************************************/
 
-const scriptletGlobals = {}; // eslint-disable-line
+// End of local scope
+})("eb67c4fa-700a-4c20-bf4f-852ab9b7ca91");
+
+void 0;
+
+
+
+// ruleset: ublock-filters
+
+// Important!
+// Isolate from global scope
+
+// Start of local scope
+(function uBOL_scriptlets($SECRET_ID$) {
+
+/******************************************************************************/
+
+const scriptletGlobals = self[$SECRET_ID$];
+
+if ( scriptletGlobals.origins.length === 0 ) { return; }
+
+/******************************************************************************/
 
 const $hasHostnames$ = true;
 const $hasEntities$ = true;
@@ -3758,63 +1919,16 @@ const $hasRegexes$ = false;
 
 /******************************************************************************/
 
-const entries = (( ) => {
-    const docloc = document.location;
-    const origins = [ docloc.origin ];
-    if ( docloc.ancestorOrigins ) {
-        origins.push(...docloc.ancestorOrigins);
-    }
-    return origins.map((origin, i) => {
-        const beg = origin.indexOf('://');
-        if ( beg === -1 ) { return; }
-        const hn1 = origin.slice(beg+3)
-        const end = hn1.indexOf(':');
-        const hn2 = end === -1 ? hn1 : hn1.slice(0, end);
-        if ( hn2.length === 0 ) { return; }
-        const hns = [ hn2 ];
-        for ( let pos = 0; ; ) {
-            pos = hn2.indexOf('.', pos) + 1;
-            if ( pos === 0 ) { break; }
-            hns.push(hn2.slice(pos));
-        }
-        hns.push('*');
-        const ens = [];
-        if ( $hasEntities$ ) {
-            for ( let hn of hns ) {
-                for (;;) {
-                    const pos = hn.lastIndexOf('.');
-                    if ( pos === -1 ) { break; }
-                    hn = hn.slice(0, pos);
-                    ens.push(`${hn}.*`);
-                }
-            }
-            ens.sort((a, b) => {
-                const d = b.length - a.length;
-                if ( d !== 0 ) { return d; }
-                return a > b ? -1 : 1;
-            });
-        }
-        return { hns, ens, i };
-    }).filter(a => a);
-})();
-if ( entries.length === 0 ) { return; }
-
 const todo = new Set();
 
 if ( $hasHostnames$ ) {
-    const $scriptletHostnames$ = /* 5 */ [
-  "youtube.com",
-  "m.youtube.com",
-  "tv.youtube.com",
-  "www.youtube.com",
-  "music.youtube.com"
-];
+    const scriptletHostnames = /* 5 */ ["youtube.com","m.youtube.com","tv.youtube.com","www.youtube.com","music.youtube.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
         while ( l < r ) {
             i = l + r >>> 1;
-            candidate = $scriptletHostnames$[i];
+            candidate = scriptletHostnames[i];
             d = hn.length - candidate.length;
             if ( d === 0 ) {
                 if ( hn === candidate ) {
@@ -3832,29 +1946,28 @@ if ( $hasHostnames$ ) {
     };
     const indicesFromHostname = (out, hnDetails, suffix = '') => {
         if ( hnDetails.hns.length === 0 ) { return; }
-        let r = $scriptletHostnames$.length;
+        let r = scriptletHostnames.length;
         for ( const hn of hnDetails.hns ) {
             r = collectArglistRefIndices(out, `${hn}${suffix}`, r);
         }
         if ( $hasEntities$ ) {
-            let r = $scriptletHostnames$.length;
+            let r = scriptletHostnames.length;
             for ( const en of hnDetails.ens ) {
                 r = collectArglistRefIndices(out, `${en}${suffix}`, r);
             }
         }
     };
     const todoIndices = new Set();
-    indicesFromHostname(todoIndices, entries[0]);
+    indicesFromHostname(todoIndices, scriptletGlobals.origins[0]);
     if ( $hasAncestors$ ) {
-        for ( const entry of entries ) {
+        for ( const entry of scriptletGlobals.origins ) {
             if ( entry.i === 0 ) { continue; }
             indicesFromHostname(todoIndices, entry, '>>');
         }
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const $scriptletArglistRefs$ = /* 5 */ "20,-59,-1568,-1926;20,366,367,368,369,370,371,372;11,20,366,367,368,369,371;1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,366,367,368,369,371;20,366,367,368,369,370,371";
-        const arglistRefs = $scriptletArglistRefs$.split(';');
+        const arglistRefs = /* 5 */ ["20,-59,-1576,-1935","20,376,377,378,379,380,381,382","11,20,376,377,378,379,381","1,2,3,4,5,6,7,8,9,10,12,13,14,15,16,17,18,19,20,21,376,377,378,379,381","20,376,377,378,379,380,381"];
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
                 todo.add(ref);
@@ -3864,18 +1977,18 @@ if ( $hasHostnames$ ) {
 }
 
 if ( $hasRegexes$ ) {
-    const $scriptletFromRegexes$ = /* 0 */ [];
-    const { hns } = entries[0];
-    for ( let i = 0, n = $scriptletFromRegexes$.length; i < n; i += 3 ) {
-        const needle = $scriptletFromRegexes$[i+0];
+    const scriptletFromRegexes = /* 0 */ [];
+    const { hns } = scriptletGlobals.origins[0];
+    for ( let i = 0, n = scriptletFromRegexes.length; i < n; i += 3 ) {
+        const needle = scriptletFromRegexes[i+0];
         let regex;
         for ( const hn of hns ) {
             if ( hn.includes(needle) === false ) { continue; }
             if ( regex === undefined ) {
-                regex = new RegExp($scriptletFromRegexes$[i+1]);
+                regex = new RegExp(scriptletFromRegexes[i+1]);
             }
             if ( regex.test(hn) === false ) { continue; }
-            for ( const ref of JSON.parse(`[${$scriptletFromRegexes$[i+2]}]`) ) {
+            for ( const ref of JSON.parse(`[${scriptletFromRegexes[i+2]}]`) ) {
                 todo.add(ref);
             }
         }
@@ -3884,449 +1997,14 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const $scriptletFunctions$ = /* 10 */
-[trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
-    const $scriptletArgs$ = /* 42 */ [
-  "JSON.stringify",
-  "0",
-  "[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}",
-  "[?.attestationRequest][?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}",
-  "[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}",
-  "[?.attestationRequest][?.context.client.userAgent*=\"instream\"].playbackContext[?.contentPlaybackContext]+={\"adPlaybackContext\":{\"adType\":\"AD_TYPE_INSTREAM\"}}",
-  "[?.attestationRequest][?.context.client.userAgent=/channel|lactmilli|instream/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"",
-  "[?.attestationRequest][?.context.client.userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})",
-  "[native code]",
-  "17000",
-  "0.001",
-  "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots",
-  "",
-  "propsToMatch",
-  "/player?",
-  "adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots",
-  "/playlist?",
-  "/\\/player(?:\\?.+)?$/",
-  "\"adPlacements\"",
-  "\"no_ads\"",
-  "/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/",
-  "/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/",
-  "/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms",
-  "$1",
-  "player?",
-  "\"adSlots\"",
-  "/^\\W+$/",
-  "Node.prototype.appendChild",
-  "fetch",
-  "Request",
-  "JSON.parse",
-  "entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
-  "/get_watch?",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "undefined",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "ytInitialPlayerResponse.playerAds",
-  "ytInitialPlayerResponse.adPlacements",
-  "ytInitialPlayerResponse.adSlots",
-  "playerResponse.adPlacements",
-  "playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important",
-  "reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd",
-  "url:/reel_watch_sequence?",
-  "..itemSectionRenderer.contents.*[?.adSlotRenderer]",
-  "/get_watch"
-];
-    const $scriptletArglists$ = /* 28 */ ";0,0,1,2;0,0,1,3;0,0,1,4;0,0,1,5;0,0,1,6;0,0,1,7;1,8,9,10;2,11,12,13,14;2,15,12,13,16;3,11,12,13,17;4,18,19,20;4,21,12,20;4,22,23,17;5,18,19,24;5,25,19,24;5,25,19,26;6,27,28;6,27,29;6,27,30;7,31;5,25,19,32;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;11,422,52;11,423,52;11,424,52;11,425,52;7,426;2,427,12,13,428;28,429,13,430";
-    const arglists = $scriptletArglists$.split(';');
-    const args = $scriptletArgs$;
+    const arglists = /* 383 */ ["","0,0,1,2","0,0,1,3","0,0,1,4","0,0,1,5","0,0,1,6","0,0,1,7","1,8,9,10","2,11,12,13,14","2,15,12,13,16","3,11,12,13,17","4,18,19,20","4,21,12,20","4,22,23,17","5,18,19,24","5,25,19,24","5,25,19,26","6,27,28","6,27,29","6,27,30","7,31","5,25,19,32","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,433,52","11,434,52","11,435,52","11,436,52","7,437","2,438,12,13,439","29,440,13,441"];
+    const args = /* 442 */ ["JSON.stringify","0","[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}","[?.attestationRequest][?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}","[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}","[?.attestationRequest][?.context.client.userAgent*=\"instream\"].playbackContext[?.contentPlaybackContext]+={\"adPlaybackContext\":{\"adType\":\"AD_TYPE_INSTREAM\"}}","[?.attestationRequest][?.context.client.userAgent=/channel|lactmilli|instream/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"","[?.attestationRequest][?.context.client.userAgent=/adunit|channel|lactmilli|instream|inline|yahi|eafg/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[native code]","17000","0.001","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots","","propsToMatch","/\\/player(\\?|$)/","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots","/playlist?","/\\/player(?:\\?.+)?$/","\"adPlacements\"","\"no_ads\"","/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/","/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/","/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms","$1","player?","\"adSlots\"","/^\\W+$/","Node.prototype.appendChild","fetch","Request","JSON.parse","entries.[-].command.reelWatchEndpoint.adClientParams.isAd","/get_watch?","","","","","","","","","","","","","","","","","","","","undefined","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ytInitialPlayerResponse.playerAds","ytInitialPlayerResponse.adPlacements","ytInitialPlayerResponse.adSlots","playerResponse.adPlacements","playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important","reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd","url:/reel_watch_sequence?","..itemSectionRenderer.contents.*[?.adSlotRenderer]","/get_watch"];
+    const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
         if ( ref < 0 ) { continue; }
         if ( todo.has(~ref) ) { continue; }
         const arglist = JSON.parse(`[${arglists[ref]}]`);
-        const fn = $scriptletFunctions$[arglist[0]];
+        const fn = functionRefs[arglist[0]];
         try { fn(...arglist.slice(1).map(a => args[a])); }
         catch { }
     }
@@ -4335,6 +2013,28 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})();
+})("eb67c4fa-700a-4c20-bf4f-852ab9b7ca91");
+
+void 0;
+
+
+
+// Important!
+// Isolate from global scope
+
+// Start of local scope
+(function uBOL_scriptletFrameworkEnd($SECRET_ID$) {
+
+/******************************************************************************/
+
+const scriptletGlobals = self[$SECRET_ID$];
+delete self[$SECRET_ID$];
+scriptletGlobals.origins = undefined;
+scriptletGlobals.functionRefs = undefined
+
+/******************************************************************************/
+
+// End of local scope
+})("eb67c4fa-700a-4c20-bf4f-852ab9b7ca91");
 
 void 0;
