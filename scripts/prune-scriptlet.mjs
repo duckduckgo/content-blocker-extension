@@ -5,31 +5,55 @@ const sectionSeparator = '/*****************************************************
 /**
  * Matches the inline data arrays in uBOL generated scriptlet files, e.g.
  *     const scriptletHostnames = /* 13987 *\/ ["*","edu",...];
- * @param {string} name
+ *     scriptletGlobals.functionRefs = /* 59 *\/ [trustedEditInboundObject,adjustSetTimeout,...];
+ * @param {string} target left hand side of the assignment
  */
-const arrayDeclaration = (name) => new RegExp(`(const ${name} = )/\\* \\d+ \\*/ (\\[.*\\]);`);
+const arrayDeclaration = (target) => new RegExp(`(${target.replace(/[.$]/g, '\\$&')} = )/\\* \\d+ \\*/ \\[(.*)\\];`);
+
+const jsonItems = {
+    parse: (items) => JSON.parse(`[${items}]`),
+    serialize: (values) => JSON.stringify(values).slice(1, -1),
+};
+const identifierItems = {
+    parse: (items) => items.split(','),
+    serialize: (values) => values.join(','),
+};
 
 /**
  * @param {string} source
- * @param {string} name
+ * @param {string} target
+ * @param {typeof jsonItems} items
  * @returns {any[]}
  */
-function readArray(source, name) {
-    const match = source.match(arrayDeclaration(name));
+export function readArray(source, target, items = jsonItems) {
+    const match = source.match(arrayDeclaration(target));
     if (!match) {
-        throw new Error(`Could not find array ${name} in scriptlet`);
+        throw new Error(`Could not find ${target} in scriptlet`);
     }
-    return JSON.parse(match[2]);
+    return items.parse(match[2]);
 }
 
 /**
  * @param {string} source
- * @param {string} name
+ * @param {string} target
  * @param {any[]} values
+ * @param {typeof jsonItems} items
  * @returns {string}
  */
-function writeArray(source, name, values) {
-    return source.replace(arrayDeclaration(name), (_, decl) => `${decl}/* ${values.length} */ ${JSON.stringify(values)};`);
+function writeArray(source, target, values, items = jsonItems) {
+    readArray(source, target, items);
+    return source.replace(arrayDeclaration(target), (_, decl) => `${decl}/* ${values.length} */ [${items.serialize(values)}];`);
+}
+
+/**
+ * Keep only the entries of arr at the given indices. Other entries are blanked rather than removed so
+ * that indices are preserved, and the array is truncated after the last kept entry.
+ * @param {any[]} arr
+ * @param {Set<number>} keep
+ * @returns {any[]}
+ */
+function keepIndices(arr, keep) {
+    return arr.slice(0, Math.max(-1, ...keep) + 1).map((v, i) => (keep.has(i) ? v : ''));
 }
 
 /**
@@ -51,63 +75,57 @@ function secretId(source) {
  * @returns {string}
  */
 function stripHeader(source) {
+    if (!source.startsWith('/*')) {
+        throw new Error('Expected scriptlet to start with a license comment');
+    }
     return source.slice(source.indexOf('*/') + 2);
 }
 
 /**
  * Prune a ruleset scriptlet (e.g. ublock-filters.js) to only include hosts in includeHosts.
  *
- * Indices into scriptletHostnames, arglists and args are preserved (unused entries are blanked
- * and the arrays truncated after the last used entry), so references between them stay valid.
+ * Indices into arglists and args are preserved (see keepIndices), so references between them
+ * stay valid.
  * @param {string} scriptlet ruleset scriptlet contents
  * @param {string[]} includeHosts list of hosts whose scriptlets should be kept
  * @returns {{ source: string, functionIndices: Set<number> }} pruned scriptlet, and the indices
  *   into scriptletGlobals.functionRefs it uses
  */
 function pruneRuleset(scriptlet, includeHosts) {
-    const scriptletHostnames = readArray(scriptlet, 'scriptletHostnames');
-    const scriptletArglistRefs = readArray(scriptlet, 'arglistRefs');
-    const scriptletArglists = readArray(scriptlet, 'arglists');
-    const scriptletArgs = readArray(scriptlet, 'args');
+    const scriptletHostnames = readArray(scriptlet, 'const scriptletHostnames');
+    const scriptletArglistRefs = readArray(scriptlet, 'const arglistRefs');
+    const scriptletArglists = readArray(scriptlet, 'const arglists');
+    const scriptletArgs = readArray(scriptlet, 'const args');
 
     // hostnames are sorted for a binary search in the scriptlet: filtering keeps that order, and
     // arglistRefs are aligned with hostnames so we filter them the same way.
-    const indices = scriptletHostnames.reduce((acc, hn, i) => {
-        if (includeHosts.includes(hn)) {
-            acc.push(i);
-        }
-        return acc;
-    }, []);
-    const newScriptletHostnames = indices.map((i) => scriptletHostnames[i]);
-    const newScriptletArglistRefs = indices.map((i) => scriptletArglistRefs[i]);
+    const keepHost = scriptletHostnames.map((hn) => includeHosts.includes(hn));
+    const newScriptletHostnames = scriptletHostnames.filter((_, i) => keepHost[i]);
+    const newScriptletArglistRefs = scriptletArglistRefs.filter((_, i) => keepHost[i]);
 
     // Negative refs are exceptions (~ref) and don't point directly at an arglist.
-    const arglistIndices = new Set(
-        newScriptletArglistRefs
-            .map((refs) => JSON.parse(`[${refs}]`))
-            .flat()
-            .filter((ref) => ref >= 0),
-    );
+    const arglistIndices = new Set(newScriptletArglistRefs.flatMap((refs) => JSON.parse(`[${refs}]`)).filter((ref) => ref >= 0));
     // Arglist 0 is a sentinel used to disable all scriptlets, keep it as is.
     arglistIndices.add(0);
-    const newScriptletArglists = scriptletArglists
-        .slice(0, Math.max(...arglistIndices) + 1)
-        .map((v, i) => (arglistIndices.has(i) ? v : ''));
+    const newScriptletArglists = keepIndices(scriptletArglists, arglistIndices);
 
     // Arglists are "functionIndex,argIndex,argIndex,..."
-    const arglists = [...arglistIndices].filter((i) => scriptletArglists[i] !== '').map((i) => scriptletArglists[i].split(',').map(Number));
+    const arglists = newScriptletArglists.filter(Boolean).map((a) => a.split(',').map(Number));
     const functionIndices = new Set(arglists.map((a) => a[0]));
     const argIndices = new Set(arglists.flatMap((a) => a.slice(1)));
-    const newScriptletArgs = scriptletArgs.slice(0, Math.max(...argIndices) + 1).map((v, i) => (argIndices.has(i) ? v : ''));
 
     let source = scriptlet;
-    source = writeArray(source, 'scriptletHostnames', newScriptletHostnames);
-    source = writeArray(source, 'arglistRefs', newScriptletArglistRefs);
-    source = writeArray(source, 'arglists', newScriptletArglists);
-    source = writeArray(source, 'args', newScriptletArgs);
+    source = writeArray(source, 'const scriptletHostnames', newScriptletHostnames);
+    source = writeArray(source, 'const arglistRefs', newScriptletArglistRefs);
+    source = writeArray(source, 'const arglists', newScriptletArglists);
+    source = writeArray(source, 'const args', keepIndices(scriptletArgs, argIndices));
     // Regex hostname matching is not needed for our included hosts.
-    source = writeArray(source, 'scriptletFromRegexes', []);
-    source = source.replace(/^const \$hasRegexes\$ = true;$/m, 'const $hasRegexes$ = false;');
+    source = writeArray(source, 'const scriptletFromRegexes', []);
+    const hasRegexes = /^const \$hasRegexes\$ = (?:true|false);$/m;
+    if (!hasRegexes.test(source)) {
+        throw new Error('Could not find $hasRegexes$ in scriptlet');
+    }
+    source = source.replace(hasRegexes, 'const $hasRegexes$ = false;');
     return { source, functionIndices };
 }
 
@@ -126,48 +144,32 @@ function pruneFramework(begin, functionIndices, ruleset) {
     }
     const [header, globals, declarations, refs, footer] = sections;
 
-    // functionRefs is aligned with the function index in arglists: blank unused entries so that
-    // indices are unchanged.
-    const functionRefsDeclaration = /(scriptletGlobals\.functionRefs = )\/\* \d+ \*\/ \[(.*)\];/;
-    const functionRefsMatch = refs.match(functionRefsDeclaration);
-    if (!functionRefsMatch) {
-        throw new Error('Could not find scriptletGlobals.functionRefs in scriptlet-begin.js');
-    }
-    const functionRefs = functionRefsMatch[2].split(',');
-    const newFunctionRefs = functionRefs.slice(0, Math.max(...functionIndices) + 1).map((v, i) => (functionIndices.has(i) ? v : ''));
-    const newRefs = refs.replace(
-        functionRefsDeclaration,
-        (_, decl) => `${decl}/* ${newFunctionRefs.length} */ [${newFunctionRefs.join(',')}];`,
-    );
+    // functionRefs is aligned with the function index in arglists.
+    const functionRefs = readArray(refs, 'scriptletGlobals.functionRefs', identifierItems);
+    const newRefs = writeArray(refs, 'scriptletGlobals.functionRefs', keepIndices(functionRefs, functionIndices), identifierItems);
 
-    // The declarations section is a list of top level function and class declarations. Repeatedly
-    // drop any that are no longer referenced by the remaining code.
-    const context = vm.createContext({});
-    vm.runInContext(declarations, context);
-    const names = [...declarations.matchAll(/^(?:function|class) ([\w$]+)\b/gm)].map((m) => m[1]);
-    const sources = new Map(names.map((name) => [name, vm.runInContext(`${name}.toString()`, context)]));
-    for (const [name, source] of sources) {
-        if (!declarations.includes(source)) {
-            throw new Error(`Could not locate declaration of ${name} in scriptlet-begin.js`);
-        }
-    }
-    const kept = new Set(names);
-    const isReferenced = (name) => {
-        const pattern = new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}(?![\\w$])`);
-        const otherCode = [newRefs, ruleset, ...[...kept].filter((n) => n !== name).map((n) => sources.get(n))];
-        return otherCode.some((code) => pattern.test(code));
-    };
-    let changed = true;
-    while (changed) {
-        changed = false;
-        for (const name of kept) {
-            if (!isReferenced(name)) {
-                kept.delete(name);
-                changed = true;
+    // The declarations section is a list of unindented top level function and class declarations:
+    // each runs until the next one starts.
+    const starts = [...declarations.matchAll(/^(?:function|class) ([\w$]+)\b/gm)];
+    const sources = new Map(starts.map((m, i) => [m[1], declarations.slice(m.index, starts[i + 1]?.index).trimEnd()]));
+
+    // Keep declarations reachable from the functionRefs and the ruleset.
+    const patterns = new Map([...sources.keys()].map((name) => [name, new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}(?![\\w$])`)]));
+    const kept = new Set();
+    const pending = [newRefs, ruleset];
+    while (pending.length > 0) {
+        const code = pending.pop();
+        for (const [name, pattern] of patterns) {
+            if (!kept.has(name) && pattern.test(code)) {
+                kept.add(name);
+                pending.push(sources.get(name));
             }
         }
     }
-    const newDeclarations = `\n\n${[...kept].map((name) => sources.get(name)).join('\n\n')}\n\n`;
+    const newDeclarations = `\n\n${[...sources.keys()]
+        .filter((name) => kept.has(name))
+        .map((name) => sources.get(name))
+        .join('\n\n')}\n\n`;
 
     return [header, globals, newDeclarations, newRefs, footer].join(sectionSeparator);
 }
@@ -191,10 +193,10 @@ export function pruneScriptlet({ begin, ruleset, end }, includeHosts) {
     const newBegin = pruneFramework(begin, functionIndices, newRuleset);
 
     // Update copyright header
-    const headerLines = newBegin.split('\n');
-    headerLines.splice(1, 0, [
-        `    Copyright (C) 2026 Duck Duck Go, Inc.
-    Modified from the original source:`,
-    ]);
-    return [headerLines.join('\n'), stripHeader(newRuleset), stripHeader(end)].join('\n');
+    const header = newBegin.replace('\n', '\n    Copyright (C) 2026 Duck Duck Go, Inc.\n    Modified from the original source:\n');
+    const output = [header, stripHeader(newRuleset), stripHeader(end)].join('\n');
+    // Fail the update rather than ship a scriptlet that does not parse.
+    // eslint-disable-next-line no-new
+    new vm.Script(output);
+    return output;
 }

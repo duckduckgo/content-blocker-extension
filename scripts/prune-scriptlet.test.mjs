@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { pruneScriptlet } from './prune-scriptlet.mjs';
+import { pruneScriptlet, readArray } from './prune-scriptlet.mjs';
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/scriptlet');
 const fixture = {
@@ -13,6 +13,7 @@ const fixture = {
     end: readFileSync(join(fixtureDir, 'scriptlet-end.js'), 'utf8'),
 };
 const includeHosts = ['youtube.com', 'www.youtube.com'];
+const pruned = pruneScriptlet(fixture, includeHosts);
 
 /**
  * Run scriptlet sources in a sandbox as if injected into a page at origin.
@@ -34,18 +35,13 @@ function runScriptlets(sources, origin) {
 }
 
 test('pruneScriptlet output is valid JavaScript', () => {
-    const pruned = pruneScriptlet(fixture, includeHosts);
-
     assert.doesNotThrow(() => new vm.Script(pruned), 'pruned scriptlet should parse');
 
-    const hostnamesMatch = /const scriptletHostnames = \/\* \d+ \*\/ (\[.*\]);/.exec(pruned);
-    assert.ok(hostnamesMatch, 'expected scriptletHostnames declaration');
-    assert.deepEqual(JSON.parse(hostnamesMatch[1]), includeHosts);
+    assert.deepEqual(readArray(pruned, 'const scriptletHostnames'), includeHosts);
     assert.doesNotMatch(pruned, /drop\.example/);
 });
 
 test('pruneScriptlet keeps scriptlets for included hosts', () => {
-    const pruned = pruneScriptlet(fixture, includeHosts);
     const upstream = runScriptlets([fixture.begin, fixture.ruleset, fixture.end], 'https://www.youtube.com');
     const result = runScriptlets([pruned], 'https://www.youtube.com');
 
@@ -63,13 +59,10 @@ test('pruneScriptlet keeps scriptlets for included hosts', () => {
 });
 
 test('pruneScriptlet drops scriptlets for other hosts', () => {
-    const pruned = pruneScriptlet(fixture, includeHosts);
     assert.deepEqual(runScriptlets([pruned], 'https://drop.example').calls, []);
 });
 
 test('pruneScriptlet removes unused functions and classes', () => {
-    const pruned = pruneScriptlet(fixture, includeHosts);
-
     for (const name of ['keepMe', 'keepToo', 'helperFn', 'Recorder']) {
         assert.match(pruned, new RegExp(`^(function|class) ${name}\\b`, 'm'), `${name} should be kept`);
     }
