@@ -30,10 +30,19 @@ const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${
             console.log(`[Fetch ${scriptletName}]`);
             fs.mkdirSync(`src/rulesets/scripting/scriptlet/${context.toLowerCase()}`, { recursive: true });
             if (list !== 'ublock-experimental' || includeExperimentalScriptlets) {
-                fs.writeFileSync(
-                    `src/scriptlets/${scriptletName}`,
-                    pruneScriptlet(await (await fetch(`${uBOLBaseURL}/scripting/scriptlet/${scriptletName}`)).text(), includeHosts),
-                );
+                const fetchScriptlet = async (name) => {
+                    const response = await fetch(`${uBOLBaseURL}/scripting/scriptlet/${context.toLowerCase()}/${name}.js`);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch ${context.toLowerCase()}/${name}.js: ${response.status}`);
+                    }
+                    return response.text();
+                };
+                const [begin, ruleset, end] = await Promise.all([
+                    fetchScriptlet('scriptlet-begin'),
+                    fetchScriptlet(list),
+                    fetchScriptlet('scriptlet-end'),
+                ]);
+                fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, includeHosts));
             } else {
                 fs.writeFileSync(`src/scriptlets/${scriptletName}`, '');
             }
