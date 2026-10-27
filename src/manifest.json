@@ -31,34 +31,54 @@
     },
     "content_scripts": [
         {
-            "matches": ["<all_urls>"],
+            "matches": [
+                "https://www.youtube.com/*",
+                "https://youtube.com/*",
+                "https://tv.youtube.com/*",
+                "https://m.youtube.com/*",
+                "https://music.youtube.com/*"
+            ],
             "js": ["scriptlets/main/ublock-filters.js"],
-            "all_frames": true,
-            "match_origin_as_fallback": true,
+            "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": ["<all_urls>"],
+            "matches": [
+                "https://www.youtube.com/*",
+                "https://youtube.com/*",
+                "https://tv.youtube.com/*",
+                "https://m.youtube.com/*",
+                "https://music.youtube.com/*"
+            ],
             "js": ["scriptlets/isolated/ublock-filters.js"],
-            "all_frames": true,
-            "match_origin_as_fallback": true,
+            "all_frames": false,
             "run_at": "document_start",
             "world": "ISOLATED"
         },
         {
-            "matches": ["<all_urls>"],
+            "matches": [
+                "https://www.youtube.com/*",
+                "https://youtube.com/*",
+                "https://tv.youtube.com/*",
+                "https://m.youtube.com/*",
+                "https://music.youtube.com/*"
+            ],
             "js": ["scriptlets/main/ublock-experimental.js"],
-            "all_frames": true,
-            "match_origin_as_fallback": true,
+            "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": ["<all_urls>"],
+            "matches": [
+                "https://www.youtube.com/*",
+                "https://youtube.com/*",
+                "https://tv.youtube.com/*",
+                "https://m.youtube.com/*",
+                "https://music.youtube.com/*"
+            ],
             "js": ["scriptlets/isolated/ublock-experimental.js"],
-            "all_frames": true,
-            "match_origin_as_fallback": true,
+            "all_frames": false,
             "run_at": "document_start",
             "world": "ISOLATED"
         }
