@@ -31,52 +31,28 @@
     },
     "content_scripts": [
         {
-            "matches": [
-                "https://www.youtube.com/*",
-                "https://youtube.com/*",
-                "https://tv.youtube.com/*",
-                "https://m.youtube.com/*",
-                "https://music.youtube.com/*"
-            ],
+            "matches": ["*://*.youtube.com/*"],
             "js": ["scriptlets/main/ublock-filters.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": [
-                "https://www.youtube.com/*",
-                "https://youtube.com/*",
-                "https://tv.youtube.com/*",
-                "https://m.youtube.com/*",
-                "https://music.youtube.com/*"
-            ],
+            "matches": ["*://*.youtube.com/*"],
             "js": ["scriptlets/isolated/ublock-filters.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "ISOLATED"
         },
         {
-            "matches": [
-                "https://www.youtube.com/*",
-                "https://youtube.com/*",
-                "https://tv.youtube.com/*",
-                "https://m.youtube.com/*",
-                "https://music.youtube.com/*"
-            ],
+            "matches": ["*://*.youtube.com/*"],
             "js": ["scriptlets/main/ublock-experimental.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": [
-                "https://www.youtube.com/*",
-                "https://youtube.com/*",
-                "https://tv.youtube.com/*",
-                "https://m.youtube.com/*",
-                "https://music.youtube.com/*"
-            ],
+            "matches": ["*://*.youtube.com/*"],
             "js": ["scriptlets/isolated/ublock-experimental.js"],
             "all_frames": false,
             "run_at": "document_start",

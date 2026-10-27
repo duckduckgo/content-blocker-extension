@@ -5,8 +5,7 @@ import { pruneScriptlet } from './prune-scriptlet.mjs';
 const includeExperimentalScriptlets = false;
 const includeLists = ['ublock-filters', 'ublock-experimental'];
 const includeHosts = ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'];
-// scriptlets are pruned to includeHosts, so only inject them on those sites
-const includeMatches = includeHosts.map((host) => `https://${host}/*`);
+const includeMatches = ['*://*.youtube.com/*'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
 const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${uBOLRef}/${rulesetsPath}`;
