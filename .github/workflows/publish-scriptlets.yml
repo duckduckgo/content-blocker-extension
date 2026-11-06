@@ -122,6 +122,7 @@ jobs:
                   npm run lint-fix
 
             - name: Create config PR
+              id: create-pr
               uses: peter-evans/create-pull-request@v7
               with:
                   path: privacy-configuration/
@@ -137,3 +138,10 @@ jobs:
                       dharb
                       miasma13
                   token: ${{ secrets.PRIVACY_CONFIG_PAT }}
+
+            - name: Enable auto-merge on config PR
+              if: steps.create-pr.outputs.pull-request-number != ''
+              run: gh pr merge "$PR_NUMBER" --repo duckduckgo/privacy-configuration --auto --squash
+              env:
+                  GH_TOKEN: ${{ secrets.PRIVACY_CONFIG_PAT }}
+                  PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
