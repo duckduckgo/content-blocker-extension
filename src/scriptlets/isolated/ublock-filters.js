@@ -231,14 +231,18 @@ function safeSelf() {
         'Request_clone': self.Request.prototype.clone,
         'String': self.String,
         'String_fromCharCode': String.fromCharCode,
+        'String_includes': String.prototype.includes,
         'String_split': String.prototype.split,
         'XMLHttpRequest': self.XMLHttpRequest,
+        'XMLHttpRequest_open': Function.prototype.call.bind(self.XMLHttpRequest.prototype.open),
+        'XMLHttpRequest_send': Function.prototype.call.bind(self.XMLHttpRequest.prototype.send),
         'addEventListener': self.EventTarget.prototype.addEventListener,
         'removeEventListener': self.EventTarget.prototype.removeEventListener,
         'fetch': self.fetch,
         'JSON': self.JSON,
         'JSON_parse': Function.prototype.call.bind(self.JSON.parse, self.JSON),
         'JSON_stringify': Function.prototype.call.bind(self.JSON.stringify, self.JSON),
+        'structuredClone': Function.prototype.call.bind(self.structuredClone, self),
         'log': console.log.bind(console),
         // Properties
         logLevel: 0,
@@ -293,7 +297,7 @@ function safeSelf() {
             if ( details.re ) {
                 return this.RegExp_test(details.re, haystack) === details.expect;
             }
-            return haystack.includes(details.pattern) === details.expect;
+            return this.String_includes.call(`${haystack}`, details.pattern) === details.expect;
         },
         patternToRegex(pattern, flags = undefined, verbatim = false) {
             if ( pattern === '' ) { return /^/; }
@@ -385,8 +389,13 @@ function safeSelf() {
 scriptletGlobals.origins = (( ) => {
     const docloc = document.location;
     const origins = [ docloc.origin ];
-    if ( docloc.ancestorOrigins ) {
-        origins.push(...docloc.ancestorOrigins);
+    if ( docloc.ancestorOrigins?.length ) {
+        const topOrigin = docloc.ancestorOrigins[docloc.ancestorOrigins.length-1];
+        if ( topOrigin !== 'null' ) {
+            origins.push(topOrigin);
+        } else if ( scriptletGlobals.topOrigin ) {
+            origins.push(scriptletGlobals.topOrigin);
+        }
     }
     const out = [];
     for ( let i = 0; i < origins.length; i++ ) {
@@ -427,7 +436,7 @@ scriptletGlobals.functionRefs = /* 2 */ [replaceNodeText,removeNodeText];
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
 
@@ -550,7 +559,7 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
 
@@ -572,6 +581,6 @@ scriptletGlobals.functionRefs = undefined
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
