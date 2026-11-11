@@ -376,12 +376,13 @@ class JSONPath {
                     path: this.path.slice(),
                 };
                 const v = this.value.obj[this.value.key];
-                if ( recursive ) {
+                if ( recursive && typeof v === 'object' && v !== null && this.seen.has(v) === false ) {
                     if ( Array.isArray(v) ) {
                         this.stack.push({ obj: v, keys: v.keys() });
-                    } else if ( typeof v === 'object' && v !== null ) {
+                    } else {
                         this.stack.push({ obj: v, keys: JSONPath.keys(v).values() });
                     }
+                    this.seen.add(v);
                 }
                 return this;
             },
@@ -389,6 +390,7 @@ class JSONPath {
             value: undefined,
             done: false,
             stack: [],
+            seen: new WeakSet(),
             [Symbol.iterator]() { return this; },
         };
         if ( Array.isArray(v) ) {
@@ -686,7 +688,7 @@ function editInboundObjectFn(
     const editObj = obj => {
         let clone;
         try {
-            clone = safe.JSON_parse(safe.JSON_stringify(obj));
+            clone = safe.structuredClone(obj);
         } catch {
         }
         if ( typeof clone !== 'object' || clone === null ) { return; }
@@ -701,9 +703,12 @@ function editInboundObjectFn(
     proxyApplyFn(propChain, function(context) {
         const i = getArgPos(context.callArgs);
         if ( i !== undefined ) {
-            const obj = editObj(context.callArgs[i]);
-            if ( obj ) {
-                context.callArgs[i] = obj;
+            const objBefore = context.callArgs[i];
+            if ( typeof objBefore === 'object' ) {
+                const objAfter = editObj(objBefore);
+                if ( objAfter ) {
+                    context.callArgs[i] = objAfter;
+                }
             }
         }
         return context.reflect();
@@ -1370,14 +1375,18 @@ function safeSelf() {
         'Request_clone': self.Request.prototype.clone,
         'String': self.String,
         'String_fromCharCode': String.fromCharCode,
+        'String_includes': String.prototype.includes,
         'String_split': String.prototype.split,
         'XMLHttpRequest': self.XMLHttpRequest,
+        'XMLHttpRequest_open': Function.prototype.call.bind(self.XMLHttpRequest.prototype.open),
+        'XMLHttpRequest_send': Function.prototype.call.bind(self.XMLHttpRequest.prototype.send),
         'addEventListener': self.EventTarget.prototype.addEventListener,
         'removeEventListener': self.EventTarget.prototype.removeEventListener,
         'fetch': self.fetch,
         'JSON': self.JSON,
         'JSON_parse': Function.prototype.call.bind(self.JSON.parse, self.JSON),
         'JSON_stringify': Function.prototype.call.bind(self.JSON.stringify, self.JSON),
+        'structuredClone': Function.prototype.call.bind(self.structuredClone, self),
         'log': console.log.bind(console),
         // Properties
         logLevel: 0,
@@ -1432,7 +1441,7 @@ function safeSelf() {
             if ( details.re ) {
                 return this.RegExp_test(details.re, haystack) === details.expect;
             }
-            return haystack.includes(details.pattern) === details.expect;
+            return this.String_includes.call(`${haystack}`, details.pattern) === details.expect;
         },
         patternToRegex(pattern, flags = undefined, verbatim = false) {
             if ( pattern === '' ) { return /^/; }
@@ -1700,16 +1709,18 @@ function trustedPreventDomBypass(
                     }
                 }
                 if ( targetProp !== '' ) {
+                    const chains = targetProp.split(/\s+/);
                     let me = self, it = elem.contentWindow;
-                    let chain = targetProp;
-                    for (;;) {
-                        const pos = chain.indexOf('.');
-                        if ( pos === -1 ) { break; }
-                        const prop = chain.slice(0, pos);
-                        me = me[prop]; it = it[prop];
-                        chain = chain.slice(pos+1);
+                    for ( let chain of chains ) {
+                        for (;;) {
+                            const pos = chain.indexOf('.');
+                            if ( pos === -1 ) { break; }
+                            const prop = chain.slice(0, pos);
+                            me = me[prop]; it = it[prop];
+                            chain = chain.slice(pos+1);
+                        }
+                        it[chain] = me[chain];
                     }
-                    it[chain] = me[chain];
                 } else {
                     Object.defineProperty(elem, 'contentWindow', { value: self });
                 }
@@ -1853,8 +1864,13 @@ function validateConstantFn(trusted, raw, extraArgs = {}) {
 scriptletGlobals.origins = (( ) => {
     const docloc = document.location;
     const origins = [ docloc.origin ];
-    if ( docloc.ancestorOrigins ) {
-        origins.push(...docloc.ancestorOrigins);
+    if ( docloc.ancestorOrigins?.length ) {
+        const topOrigin = docloc.ancestorOrigins[docloc.ancestorOrigins.length-1];
+        if ( topOrigin !== 'null' ) {
+            origins.push(topOrigin);
+        } else if ( scriptletGlobals.topOrigin ) {
+            origins.push(scriptletGlobals.topOrigin);
+        }
     }
     const out = [];
     for ( let i = 0; i < origins.length; i++ ) {
@@ -1890,12 +1906,12 @@ scriptletGlobals.origins = (( ) => {
     return out;
 })();
 
-scriptletGlobals.functionRefs = /* 29 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
+scriptletGlobals.functionRefs = /* 31 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
 
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
 
@@ -1972,7 +1988,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const arglistRefs = /* 5 */ ["21,-60,-1572,-1953","11,21,385,386,387,388,389,390,391","13,21,385,386,387,388,390","1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22,385,386,387,388,390","21,385,386,387,388,389,390"];
+        const arglistRefs = /* 5 */ ["21,-60,-1567,-1951","11,21,386,387,388,389,390,391,392","13,21,386,387,388,389,391","1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22,386,387,388,389,391","21,386,387,388,389,390,391"];
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
                 todo.add(ref);
@@ -2002,8 +2018,8 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 392 */ ["","0,0,1,2","0,0,1,3","0,0,1,4","0,0,1,5","0,0,1,6","0,0,1,7","0,0,1,8","1,9,10,11","2,12,13,14,15","2,16,13,14,17","2,18,13,14,19","3,12,13,14,20","4,21,22,23","4,24,13,23","4,25,26,20","5,21,22,27","5,28,22,27","5,28,22,29","6,30,31","6,30,32","7,33","5,28,22,34","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,451,55","11,452,55","11,453,55","11,454,55","7,455","2,456,13,14,457","28,458,14,459"];
-    const args = /* 460 */ ["JSON.stringify","0","[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}","[?.attestationRequest][?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}","[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}","[?.attestationRequest][?.context.client.userAgent*=\"inline\"].playbackContext.contentPlaybackContext+={\"isInlinePlaybackNoAd\":true}","[?.attestationRequest][?.context.client.userAgent=/channel|lactmilli|inline/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"","[?.attestationRequest][?.context.client.userAgent=/adunit|channel|lactmilli|inline|yahi|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[?.createCommentParams].context.client.userAgent=repl({\"regex\":\"/; (adunit|channel|lactmilli|inline|yahi|eafg|yaf4)\\b/\",\"replacement\":\"\"})","[native code]","17000","0.001","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots","","propsToMatch","/\\/player(\\?|$)/","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots","/playlist?","endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.playerAds endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adPlacements endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adSlots","/resolve_url?","/\\/player(?:\\?.+)?$/","\"adPlacements\"","\"no_ads\"","/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/","/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/","/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms","$1","player?","\"adSlots\"","/^\\W+$/","Node.prototype.appendChild","fetch","Request","entries.[-].command.reelWatchEndpoint.adClientParams.isAd","/get_watch?","","","","","","","","","","","","","","","","","","","","","undefined","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ytInitialPlayerResponse.playerAds","ytInitialPlayerResponse.adPlacements","ytInitialPlayerResponse.adSlots","playerResponse.adPlacements","playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important","reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd","url:/reel_watch_sequence?","..itemSectionRenderer.contents.*[?.adSlotRenderer]","/get_watch"];
+    const arglists = /* 393 */ ["","0,0,1,2","0,0,1,3","0,0,1,4","0,0,1,5","0,0,1,6","0,0,1,7","0,0,1,8","1,9,10,11","2,12,13,14,15","2,16,13,14,17","2,18,13,14,19","3,12,13,14,20","4,21,22,23","4,24,13,23","4,25,26,20","5,21,22,27","5,28,22,27","5,28,22,29","6,30,31","6,30,32","7,33","5,28,22,34","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,454,57","11,455,57","11,456,57","11,457,57","7,458","2,459,13,14,460","30,461,14,462"];
+    const args = /* 463 */ ["JSON.stringify","0","[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}","[?.attestationRequest][?.context.client.userAgent*=\"lactmilli\"]+={\"params\":\"8AUB\"}","[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}","[?.attestationRequest][?.context.client.userAgent*=\"inline\"].playbackContext.contentPlaybackContext+={\"isInlinePlaybackNoAd\":true}","[?.attestationRequest][?.context.client.userAgent=/channel|lactmilli|inline/].playbackContext.contentPlaybackContext.lactMilliseconds=\"${now}\"","[?.attestationRequest][?.context.client.userAgent=/adunit|channel|lactmilli|inline|yahi|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[?.createCommentParams].context.client.userAgent=repl({\"regex\":\"/; (adunit|channel|lactmilli|inline|yahi|eafg|yaf4)\\b/\",\"replacement\":\"\"})","[native code]","17000","0.001","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots","","propsToMatch","/\\/player(\\?|$)/","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots","/playlist?","endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.playerAds endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adPlacements endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adSlots","/resolve_url?","/\\/player(?:\\?.+)?$/","\"adPlacements\"","\"no_ads\"","/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/","/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/","/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms","$1","player?","\"adSlots\"","/^\\W+$/","Node.prototype.appendChild","fetch","Request","entries.[-].command.reelWatchEndpoint.adClientParams.isAd","/get_watch?","","","","","","","","","","","","","","","","","","","","","","","undefined","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ytInitialPlayerResponse.playerAds","ytInitialPlayerResponse.adPlacements","ytInitialPlayerResponse.adSlots","playerResponse.adPlacements","playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important","reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd","url:/reel_watch_sequence?","..itemSectionRenderer.contents.*[?.adSlotRenderer]","/get_watch"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
         if ( ref < 0 ) { continue; }
@@ -2018,7 +2034,7 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
 
@@ -2040,6 +2056,6 @@ scriptletGlobals.functionRefs = undefined
 /******************************************************************************/
 
 // End of local scope
-})("dc258953-addd-43ba-88a8-66e22006432e");
+})("05723a46-3114-4ba9-ac80-1c775003e606");
 
 void 0;
