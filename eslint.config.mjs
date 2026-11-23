@@ -19,7 +19,7 @@ export default [
         },
     },
     {
-        files: ['src/content-scripts/**/*.js'],
+        files: ['src/content-scripts/**/*.js', 'src/custom-scriptlets/**/*.js'],
         languageOptions: {
             sourceType: 'script',
             globals: globals.browser,
