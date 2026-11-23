@@ -31,28 +31,28 @@
     },
     "content_scripts": [
         {
-            "matches": ["*://*.youtube.com/*"],
+            "matches": ["*://*.youtube.com/*", "*://*.pornhub.com/*", "*://*.xvideos.com/*", "*://*.xhamster.com/*", "*://*.xnxx.com/*"],
             "js": ["scriptlets/main/ublock-filters.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": ["*://*.youtube.com/*"],
+            "matches": ["*://*.youtube.com/*", "*://*.pornhub.com/*", "*://*.xvideos.com/*", "*://*.xhamster.com/*", "*://*.xnxx.com/*"],
             "js": ["scriptlets/isolated/ublock-filters.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "ISOLATED"
         },
         {
-            "matches": ["*://*.youtube.com/*"],
+            "matches": ["*://*.youtube.com/*", "*://*.pornhub.com/*", "*://*.xvideos.com/*", "*://*.xhamster.com/*", "*://*.xnxx.com/*"],
             "js": ["scriptlets/main/ublock-experimental.js"],
             "all_frames": false,
             "run_at": "document_start",
             "world": "MAIN"
         },
         {
-            "matches": ["*://*.youtube.com/*"],
+            "matches": ["*://*.youtube.com/*", "*://*.pornhub.com/*", "*://*.xvideos.com/*", "*://*.xhamster.com/*", "*://*.xnxx.com/*"],
             "js": ["scriptlets/isolated/ublock-experimental.js"],
             "all_frames": false,
             "run_at": "document_start",

@@ -18,7 +18,7 @@ const includeHosts = [
     'xhamster.*',
     'xnxx.*',
 ];
-const includeMatches = ['*://*.youtube.com/*'];
+const includeMatches = ['*://*.youtube.com/*', '*://*.pornhub.com/*', '*://*.xvideos.com/*', '*://*.xhamster.com/*', '*://*.xnxx.com/*'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
 const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${uBOLRef}/${rulesetsPath}`;
