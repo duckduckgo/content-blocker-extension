@@ -14,7 +14,15 @@
         "https://*.youtube.com/",
         "https://youtube.com/",
         "https://youtube-nocookie.com/*",
-        "https://www.youtube-nocookie.com/*"
+        "https://www.youtube-nocookie.com/*",
+        "https://*.pornhub.com/*",
+        "https://pornhub.com/*",
+        "https://*.xvideos.com/*",
+        "https://xvideos.com/*",
+        "https://*.xhamster.com/*",
+        "https://xhamster.com/*",
+        "https://*.xnxx.com/*",
+        "https://xnxx.com/*"
     ],
     "background": {
         "service_worker": "background.js",
