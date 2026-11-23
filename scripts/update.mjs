@@ -4,7 +4,20 @@ import { pruneScriptlet } from './prune-scriptlet.mjs';
 
 const includeExperimentalScriptlets = false;
 const includeLists = ['ublock-filters', 'ublock-experimental'];
-const includeHosts = ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'];
+const includeHosts = [
+    'www.youtube.com',
+    'youtube.com',
+    'tv.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'pornhub.com',
+    'pornhub.*',
+    'xvideos.com',
+    'xvideos.*',
+    'xhamster.com',
+    'xhamster.*',
+    'xnxx.*',
+];
 const includeMatches = ['*://*.youtube.com/*'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
