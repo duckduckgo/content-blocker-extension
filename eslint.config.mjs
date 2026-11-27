@@ -19,6 +19,12 @@ export default [
         },
     },
     {
+        files: ['windows/**/*.js'],
+        languageOptions: {
+            globals: { ...globals.browser, ...globals.webextensions },
+        },
+    },
+    {
         files: ['src/content-scripts/**/*.js', 'src/custom-scriptlets/**/*.js'],
         languageOptions: {
             sourceType: 'script',
