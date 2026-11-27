@@ -4,8 +4,21 @@ import { pruneScriptlet } from './prune-scriptlet.mjs';
 
 const includeExperimentalScriptlets = false;
 const includeLists = ['ublock-filters', 'ublock-experimental'];
-const includeHosts = ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'];
-const includeMatches = ['*://*.youtube.com/*'];
+const includeHosts = [
+    'www.youtube.com',
+    'youtube.com',
+    'tv.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'pornhub.com',
+    'pornhub.*',
+    'xvideos.com',
+    'xvideos.*',
+    'xhamster.com',
+    'xhamster.*',
+    'xnxx.*',
+];
+const includeMatches = ['*://*.youtube.com/*', '*://*.pornhub.com/*', '*://*.xvideos.com/*', '*://*.xhamster.com/*', '*://*.xnxx.com/*'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
 const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${uBOLRef}/${rulesetsPath}`;
@@ -33,6 +46,25 @@ function fetchRuleset(path) {
     return fetchCache.get(path);
 }
 
+/**
+ * Our own scriptlets for one world, appended to the generated ublock-filters bundle because the
+ * apps only accept the existing scriptlet file names. Each must check its own hostname.
+ * @param {string} contextDir 'main' or 'isolated'
+ * @returns {string}
+ */
+function readCustomScriptlets(contextDir) {
+    const dir = `src/custom-scriptlets/${contextDir}`;
+    if (!fs.existsSync(dir)) {
+        return '';
+    }
+    return fs
+        .readdirSync(dir)
+        .filter((name) => name.endsWith('.js'))
+        .sort()
+        .map((name) => `\n${fs.readFileSync(`${dir}/${name}`, 'utf8')}`)
+        .join('');
+}
+
 (async () => {
     // fetch scriptlets and filter for included filter lists
     console.log('[Fetch scriptlet-details.json]');
@@ -58,7 +90,8 @@ function fetchRuleset(path) {
                 const [begin, ruleset, end] = await Promise.all(
                     ['scriptlet-begin', list, 'scriptlet-end'].map((name) => fetchRuleset(`scripting/scriptlet/${contextDir}/${name}.js`)),
                 );
-                fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, includeHosts));
+                const custom = list === 'ublock-filters' ? readCustomScriptlets(contextDir) : '';
+                fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, includeHosts) + custom);
             } else {
                 fs.writeFileSync(`src/scriptlets/${scriptletName}`, '');
             }
