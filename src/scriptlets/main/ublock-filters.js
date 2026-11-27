@@ -594,106 +594,6 @@ class JSONPath {
     }
 }
 
-class RangeParser {
-    constructor(s) {
-        this.not = s.charAt(0) === '!';
-        if ( this.not ) { s = s.slice(1); }
-        if ( s === '' ) { return; }
-        const pos = s.indexOf('-');
-        if ( pos !== 0 ) {
-            this.min = this.max = parseInt(s, 10) || 0;
-        }
-        if ( pos !== -1 ) {
-            this.max = parseInt(s.slice(pos + 1), 10) || Number.MAX_SAFE_INTEGER;
-        }
-    }
-    unbound() {
-        return this.min === undefined && this.max === undefined;
-    }
-    test(v) {
-        const n = Math.min(Math.max(Number(v) || 0, 0), Number.MAX_SAFE_INTEGER);
-        if ( this.min === this.max ) {
-            return (this.min === undefined || n === this.min) !== this.not;
-        }
-        if ( this.min === undefined ) {
-            return (n <= this.max) !== this.not;
-        }
-        if ( this.max === undefined ) {
-            return (n >= this.min) !== this.not;
-        }
-        return (n >= this.min && n <= this.max) !== this.not;
-    }
-}
-
-function abortCurrentScript(...args) {
-    runAtHtmlElementFn(( ) => {
-        abortCurrentScriptFn(...args);
-    });
-}
-
-function abortCurrentScriptFn(
-    target = '',
-    needle = '',
-    context = ''
-) {
-    if ( typeof target !== 'string' ) { return; }
-    if ( target === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('abort-current-script', target, needle, context);
-    const reNeedle = safe.patternToRegex(needle);
-    const reContext = safe.patternToRegex(context);
-    const thisScript = document.currentScript;
-    const exceptionToken = getExceptionTokenFn();
-    const scriptTexts = new WeakMap();
-    const textContentGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent').get;
-    const getScriptText = elem => {
-        let text = textContentGetter.call(elem);
-        if ( text.trim() !== '' ) { return text; }
-        if ( scriptTexts.has(elem) ) { return scriptTexts.get(elem); }
-        const [ , mime, content ] = /^data:([^,]*),(.+)$/.exec(elem.src.trim()) ||
-            [ '', '', '' ];
-        try {
-            switch ( true ) {
-            case mime.endsWith(';base64'):
-                text = self.atob(content);
-                break;
-            default:
-                text = self.decodeURIComponent(content);
-                break;
-            }
-        } catch {
-        }
-        scriptTexts.set(elem, text);
-        return text;
-    };
-    const validate = ( ) => {
-        const e = document.currentScript;
-        if ( e instanceof HTMLScriptElement === false ) { return; }
-        if ( e === thisScript ) { return; }
-        if ( context !== '' && reContext.test(e.src) === false ) { return; }
-        if ( safe.logLevel > 1 && context !== '' ) {
-            safe.uboLog(logPrefix, `Matched src\n${e.src}`);
-        }
-        const scriptText = getScriptText(e);
-        if ( reNeedle.test(scriptText) === false ) { return; }
-        if ( safe.logLevel > 1 ) {
-            safe.uboLog(logPrefix, `Matched text\n${scriptText}`);
-        }
-        safe.uboLog(logPrefix, 'Aborted');
-        throw new ReferenceError(exceptionToken);
-    };
-    let currentValue = trapPropertyFn(target, {
-        get: function() {
-            validate();
-            return currentValue;
-        },
-        set: function(a) {
-            validate();
-            currentValue = a;
-        }
-    }, { canThrow: true });
-}
-
 function adjustSetTimeout(
     needleArg = '',
     delayArg = '',
@@ -813,100 +713,6 @@ function editInboundObjectFn(
         }
         return context.reflect();
     });
-}
-
-function editObjectOnSetter(...args) {
-    editObjectOnSetterFn(false, ...args);
-}
-
-function editObjectOnSetterFn(
-    trusted = false,
-    propChain = '',
-    jsonq = '',
-) {
-    if ( propChain === '' ) { return; }
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix(
-        `${trusted ? 'trusted-' : ''}edit-object-on-setter`,
-        propChain,
-        jsonq
-    );
-    const jsonp = JSONPath.create(jsonq);
-    if ( jsonp.valid === false || jsonp.value !== undefined && trusted !== true ) {
-        return safe.uboLog(logPrefix, 'Bad JSONPath query');
-    }
-    const editObj = objBefore => {
-        const objAfter = jsonp.apply(objBefore);
-        if ( objAfter === undefined ) { return; }
-        safe.uboLog(logPrefix, 'Edited');
-        if ( safe.logLevel <= 1 ) { return; }
-        safe.uboLog(logPrefix, `After edit:\n${safe.JSON_stringify(objAfter, null, 2)}`);
-    };
-    let currentValue = trapPropertyFn(propChain, {
-        get: function() {
-            return currentValue;
-        },
-        set: function(a) {
-            currentValue = a;
-            if ( currentValue instanceof Object ) {
-                editObj(currentValue);
-            }
-        }
-    });
-    if ( currentValue instanceof Object ) {
-        editObj(currentValue);
-    }
-}
-
-function generateContentFn(trusted, directive) {
-    const safe = safeSelf();
-    const randomize = len => {
-        const chunks = [];
-        let textSize = 0;
-        do {
-            const s = safe.Math_random().toString(36).slice(2);
-            chunks.push(s);
-            textSize += s.length;
-        }
-        while ( textSize < len );
-        return chunks.join(' ').slice(0, len);
-    };
-    if ( directive === 'true' ) {
-        return randomize(10);
-    }
-    if ( directive === 'emptyObj' ) {
-        return '{}';
-    }
-    if ( directive === 'emptyArr' ) {
-        return '[]';
-    }
-    if ( directive === 'emptyStr' ) {
-        return '';
-    }
-    if ( directive.startsWith('length:') ) {
-        const match = /^length:(\d+)(?:-(\d+))?$/.exec(directive);
-        if ( match === null ) { return ''; }
-        const min = parseInt(match[1], 10);
-        const extent = safe.Math_max(parseInt(match[2], 10) || 0, min) - min;
-        const len = safe.Math_min(min + extent * safe.Math_random(), 500000);
-        return randomize(len | 0);
-    }
-    if ( directive.startsWith('war:') ) {
-        // TODO: resources should be fetched by messaging ISOLATED world
-        return '';
-    }
-    if ( directive.startsWith('join:') ) {
-        const parts = directive.slice(7)
-                .split(directive.slice(5, 7))
-                .map(a => generateContentFn(trusted, a));
-        return parts.some(a => a instanceof Promise)
-            ? Promise.all(parts).then(parts => parts.join(''))
-            : parts.join('');
-    }
-    if ( trusted ) {
-        return directive;
-    }
-    return '';
 }
 
 function getExceptionTokenFn() {
@@ -1227,92 +1033,6 @@ function matchObjectPropertiesFn(propNeedles, ...objs) {
     return matched;
 }
 
-function noWindowOpenIf(
-    pattern = '',
-    delay = '',
-    decoy = ''
-) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('no-window-open-if', pattern, delay, decoy);
-    const targetMatchResult = pattern.startsWith('!') === false;
-    if ( targetMatchResult === false ) {
-        pattern = pattern.slice(1);
-    }
-    const rePattern = safe.patternToRegex(pattern);
-    const autoRemoveAfter = (parseFloat(delay) || 0) * 1000;
-    const setTimeout = self.setTimeout;
-    const createDecoy = function(tag, urlProp, url) {
-        const decoyElem = document.createElement(tag);
-        decoyElem[urlProp] = url;
-        decoyElem.style.setProperty('height','1px', 'important');
-        decoyElem.style.setProperty('position','fixed', 'important');
-        decoyElem.style.setProperty('top','-1px', 'important');
-        decoyElem.style.setProperty('width','1px', 'important');
-        document.body.appendChild(decoyElem);
-        setTimeout(( ) => { decoyElem.remove(); }, autoRemoveAfter);
-        return decoyElem;
-    };
-    const noopFunc = function(){};
-    proxyApplyFn('open', function open(context) {
-        if ( pattern === 'debug' && safe.logLevel !== 0 ) {
-            debugger; // eslint-disable-line no-debugger
-            return context.reflect();
-        }
-        const { callArgs } = context;
-        const haystack = callArgs.join(' ');
-        if ( rePattern.test(haystack) !== targetMatchResult ) {
-            if ( safe.logLevel > 1 ) {
-                safe.uboLog(logPrefix, `Allowed (${callArgs.join(', ')})`);
-            }
-            return context.reflect();
-        }
-        safe.uboLog(logPrefix, `Prevented (${callArgs.join(', ')})`);
-        if ( delay === '' ) { return null; }
-        if ( decoy === 'blank' ) {
-            callArgs[0] = 'about:blank';
-            const r = context.reflect();
-            setTimeout(( ) => { r.close(); }, autoRemoveAfter);
-            return r;
-        }
-        const decoyElem = decoy === 'obj'
-            ? createDecoy('object', 'data', ...callArgs)
-            : createDecoy('iframe', 'src', ...callArgs);
-        let popup = decoyElem.contentWindow;
-        if ( typeof popup === 'object' && popup !== null ) {
-            Object.defineProperty(popup, 'closed', { value: false });
-        } else {
-            popup = new Proxy(self, {
-                get: function(target, prop, ...args) {
-                    if ( prop === 'closed' ) { return false; }
-                    const r = Reflect.get(target, prop, ...args);
-                    if ( typeof r === 'function' ) { return noopFunc; }
-                    return r;
-                },
-                set: function(...args) {
-                    return Reflect.set(...args);
-                },
-            });
-        }
-        if ( safe.logLevel !== 0 ) {
-            popup = new Proxy(popup, {
-                get: function(target, prop, ...args) {
-                    const r = Reflect.get(target, prop, ...args);
-                    safe.uboLog(logPrefix, `popup / get ${prop} === ${r}`);
-                    if ( typeof r === 'function' ) {
-                        return (...args) => { return r.call(target, ...args); };
-                    }
-                    return r;
-                },
-                set: function(target, prop, value, ...args) {
-                    safe.uboLog(logPrefix, `popup / set ${prop} = ${value}`);
-                    return Reflect.set(target, prop, value, ...args);
-                },
-            });
-        }
-        return popup;
-    });
-}
-
 function objectFindOwnerFn(
     root,
     path,
@@ -1439,385 +1159,6 @@ function parsePropertiesToMatchFn(propsToMatch, implicit = '') {
         }
     }
     return needles;
-}
-
-function preventAddEventListener(
-    type = '',
-    pattern = '',
-    ...varargs
-) {
-    const safe = safeSelf();
-    const extraArgs = safe.parseVarargs(varargs);
-    const logPrefix = safe.makeLogPrefix('prevent-addEventListener', type, pattern);
-    const reType = safe.patternToRegex(type, undefined, true);
-    const rePattern = safe.patternToRegex(pattern);
-    const targetSelector = extraArgs.elements || undefined;
-    const elementMatches = elem => {
-        if ( targetSelector === 'window' ) { return elem === window; }
-        if ( targetSelector === 'document' ) { return elem === document; }
-        if ( elem && elem.matches && elem.matches(targetSelector) ) { return true; }
-        const elems = Array.from(document.querySelectorAll(targetSelector));
-        return elems.includes(elem);
-    };
-    const elementDetails = elem => {
-        if ( elem instanceof Window ) { return 'window'; }
-        if ( elem instanceof Document ) { return 'document'; }
-        if ( elem instanceof Element === false ) { return '?'; }
-        const parts = [];
-        // https://github.com/uBlockOrigin/uAssets/discussions/17907#discussioncomment-9871079
-        const id = String(elem.id);
-        if ( id !== '' ) { parts.push(`#${CSS.escape(id)}`); }
-        for ( let i = 0; i < elem.classList.length; i++ ) {
-            parts.push(`.${CSS.escape(elem.classList.item(i))}`);
-        }
-        for ( let i = 0; i < elem.attributes.length; i++ ) {
-            const attr = elem.attributes.item(i);
-            if ( attr.name === 'id' ) { continue; }
-            if ( attr.name === 'class' ) { continue; }
-            parts.push(`[${CSS.escape(attr.name)}="${attr.value}"]`);
-        }
-        return parts.join('');
-    };
-    const shouldPrevent = (thisArg, type, handler) => {
-        const matchesType = safe.RegExp_test(reType, type);
-        const matchesHandler = safe.RegExp_test(rePattern, handler);
-        const matchesEither = matchesType || matchesHandler;
-        const matchesBoth = matchesType && matchesHandler;
-        if ( safe.logLevel > 1 && matchesEither ) {
-            debugger; // eslint-disable-line no-debugger
-        }
-        if ( matchesBoth && targetSelector !== undefined ) {
-            if ( elementMatches(thisArg) === false ) { return false; }
-        }
-        return matchesBoth;
-    };
-    const proxyFn = function(context) {
-        const { callArgs, thisArg } = context;
-        let t, h;
-        try {
-            t = String(callArgs[0]);
-            if ( typeof callArgs[1] === 'function' ) {
-                h = String(safe.Function_toString(callArgs[1]));
-            } else if ( typeof callArgs[1] === 'object' && callArgs[1] !== null ) {
-                if ( typeof callArgs[1].handleEvent === 'function' ) {
-                    h = String(safe.Function_toString(callArgs[1].handleEvent));
-                }
-            } else {
-                h = String(callArgs[1]);
-            }
-        } catch {
-        }
-        if ( type === '' && pattern === '' ) {
-            safe.uboLog(logPrefix, `Called: ${t}\n${h}\n${elementDetails(thisArg)}`);
-        } else if ( shouldPrevent(thisArg, t, h) ) {
-            return safe.uboLog(logPrefix, `Prevented: ${t}\n${h}\n${elementDetails(thisArg)}`);
-        }
-        return context.reflect();
-    };
-    const protect = owner => {
-        const { addEventListener } = owner;
-        Object.defineProperty(owner, 'addEventListener', {
-            set() { },
-            get() { return addEventListener; }
-        });
-    };
-    runAt(( ) => {
-        proxyApplyFn('EventTarget.prototype.addEventListener', proxyFn);
-        if ( extraArgs.protect ) { protect(EventTarget.prototype); }
-        if ( Object.hasOwn(document, 'addEventListener') ) {
-            proxyApplyFn('document.addEventListener', proxyFn);
-            if ( extraArgs.protect ) { protect(document); }
-        }
-        if ( Object.hasOwn(window, 'addEventListener') ) {
-            proxyApplyFn('window.addEventListener', proxyFn);
-            if ( extraArgs.protect ) { protect(window); }
-        }
-    }, extraArgs.runAt);
-}
-
-function preventFetch(...args) {
-    preventFetchFn(false, ...args);
-}
-
-function preventFetchFn(
-    trusted = false,
-    propsToMatch = '',
-    responseBody = '',
-    responseType = '',
-    ...varargs
-) {
-    const safe = safeSelf();
-    const setTimeout = self.setTimeout;
-    const scriptletName = `${trusted ? 'trusted-' : ''}prevent-fetch`;
-    const logPrefix = safe.makeLogPrefix(
-        scriptletName,
-        propsToMatch,
-        responseBody,
-        responseType
-    );
-    const extraArgs = safe.parseVarargs(varargs);
-    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
-    const validResponseProps = {
-        ok: [ false, true ],
-        status: [ 403 ],
-        statusText: [ '', 'Not Found' ],
-        type: [ 'basic', 'cors', 'default', 'error', 'opaque' ],
-    };
-    const responseProps = {
-        statusText: { value: 'OK' },
-    };
-    const responseHeaders = {};
-    if ( /^\{.*\}$/.test(responseType) ) {
-        try {
-            Object.entries(JSON.parse(responseType)).forEach(([ p, v ]) => {
-                if ( p === 'headers' && trusted ) {
-                    Object.assign(responseHeaders, v);
-                    return;
-                }
-                if ( validResponseProps[p] === undefined ) { return; }
-                if ( validResponseProps[p].includes(v) === false ) { return; }
-                responseProps[p] = { value: v };
-            });
-        }
-        catch { }
-    } else if ( responseType !== '' ) {
-        if ( validResponseProps.type.includes(responseType) ) {
-            responseProps.type = { value: responseType };
-        }
-    }
-    proxyApplyFn('fetch', function fetch(context) {
-        const { callArgs } = context;
-        const details = collateFetchArgumentsFn(...callArgs);
-        if ( safe.logLevel > 1 || propsToMatch === '' && responseBody === '' ) {
-            const out = Array.from(Object.entries(details)).map(a => `${a[0]}:${a[1]}`);
-            safe.uboLog(logPrefix, `Called: ${out.join('\n')}`);
-        }
-        if ( propsToMatch === '' && responseBody === '' ) {
-            return context.reflect();
-        }
-        const matched = matchObjectPropertiesFn(propNeedles, details);
-        if ( matched === undefined || matched.length === 0 ) {
-            return context.reflect();
-        }
-        return Promise.resolve(generateContentFn(trusted, responseBody)).then(text => {
-            safe.uboLog(logPrefix, `Prevented with response "${text}"`);
-            const headers = Object.assign({}, responseHeaders);
-            if ( headers['content-length'] === undefined ) {
-                headers['content-length'] = text.length;
-            }
-            const response = new Response(text, { headers });
-            const props = Object.assign(
-                { url: { value: details.url } },
-                responseProps
-            );
-            safe.Object_defineProperties(response, props);
-            if ( extraArgs.throttle ) {
-                return new Promise(resolve => {
-                    setTimeout(( ) => { resolve(response); }, extraArgs.throttle);
-                });
-            }
-            return response;
-        });
-    });
-}
-
-function preventSetTimeout(
-    needleRaw = '',
-    delayRaw = ''
-) {
-    const safe = safeSelf();
-    const logPrefix = safe.makeLogPrefix('prevent-setTimeout', needleRaw, delayRaw);
-    const needleNot = needleRaw.charAt(0) === '!';
-    const reNeedle = safe.patternToRegex(needleNot ? needleRaw.slice(1) : needleRaw);
-    const range = new RangeParser(delayRaw);
-    proxyApplyFn('setTimeout', function(context) {
-        const { callArgs } = context;
-        const a = callArgs[0] instanceof Function
-            ? safe.String(safe.Function_toString(callArgs[0]))
-            : safe.String(callArgs[0]);
-        const b = callArgs[1];
-        if ( needleRaw === '' && range.unbound() ) {
-            safe.uboLog(logPrefix, `Called:\n${a}\n${b}`);
-            return context.reflect();
-        }
-        if ( reNeedle.test(a) !== needleNot && range.test(b) ) {
-            callArgs[0] = function(){};
-            safe.uboLog(logPrefix, `Prevented:\n${a}\n${b}`);
-        }
-        return context.reflect();
-    });
-}
-
-function preventXhr(...args) {
-    preventXhrFn(false, ...args);
-}
-
-function preventXhrFn(
-    trusted = false,
-    propsToMatch = '',
-    directive = ''
-) {
-    if ( typeof propsToMatch !== 'string' ) { return; }
-    const safe = safeSelf();
-    const scriptletName = trusted ? 'trusted-prevent-xhr' : 'prevent-xhr';
-    const logPrefix = safe.makeLogPrefix(scriptletName, propsToMatch, directive);
-    const xhrInstances = new WeakMap();
-    const propNeedles = parsePropertiesToMatchFn(propsToMatch, 'url');
-    const warOrigin = scriptletGlobals.warOrigin;
-    const safeDispatchEvent = (xhr, type) => {
-        try {
-            xhr.dispatchEvent(new Event(type));
-        } catch {
-        }
-    };
-    proxyApplyFn('XMLHttpRequest.prototype.open', function(context) {
-        const { thisArg, callArgs } = context;
-        xhrInstances.delete(thisArg);
-        const [ method, url, ...args ] = callArgs;
-        if ( warOrigin !== undefined && url.startsWith(warOrigin) ) {
-            return context.reflect();
-        }
-        const haystack = { method, url };
-        if ( propsToMatch === '' && directive === '' ) {
-            safe.uboLog(logPrefix, `Called: ${safe.JSON_stringify(haystack, null, 2)}`);
-            return context.reflect();
-        }
-        if ( matchObjectPropertiesFn(propNeedles, haystack) ) {
-            const xhrDetails = Object.assign(haystack, {
-                xhr: thisArg,
-                defer: args.length === 0 || !!args[0],
-                directive,
-                headers: {
-                    'date': '',
-                    'content-type': '',
-                    'content-length': '',
-                },
-                url: haystack.url,
-                props: {
-                    response: { value: '' },
-                    responseText: { value: '' },
-                    responseXML: { value: null },
-                },
-            });
-            xhrInstances.set(thisArg, xhrDetails);
-        }
-        return context.reflect();
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.send', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined ) {
-            return context.reflect();
-        }
-        xhrDetails.headers['date'] = (new Date()).toUTCString();
-        let xhrText = '';
-        switch ( thisArg.responseType ) {
-        case 'arraybuffer':
-            xhrDetails.props.response.value = new ArrayBuffer(0);
-            xhrDetails.headers['content-type'] = 'application/octet-stream';
-            break;
-        case 'blob':
-            xhrDetails.props.response.value = new Blob([]);
-            xhrDetails.headers['content-type'] = 'application/octet-stream';
-            break;
-        case 'document': {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString('', 'text/html');
-            xhrDetails.props.response.value = doc;
-            xhrDetails.props.responseXML.value = doc;
-            xhrDetails.headers['content-type'] = 'text/html';
-            break;
-        }
-        case 'json':
-            xhrDetails.props.response.value = {};
-            xhrDetails.props.responseText.value = '{}';
-            xhrDetails.headers['content-type'] = 'application/json';
-            break;
-        default: {
-            if ( directive === '' ) { break; }
-            xhrText = generateContentFn(trusted, xhrDetails.directive);
-            if ( xhrText instanceof Promise ) {
-                xhrText = xhrText.then(text => {
-                    xhrDetails.props.response.value = text;
-                    xhrDetails.props.responseText.value = text;
-                });
-            } else {
-                xhrDetails.props.response.value = xhrText;
-                xhrDetails.props.responseText.value = xhrText;
-            }
-            xhrDetails.headers['content-type'] = 'text/plain';
-            break;
-        }
-        }
-        if ( xhrDetails.defer === false ) {
-            xhrDetails.headers['content-length'] = `${xhrDetails.props.response.value}`.length;
-            Object.defineProperties(xhrDetails.xhr, {
-                readyState: { value: 4 },
-                responseURL: { value: xhrDetails.url },
-                status: { value: 200 },
-                statusText: { value: 'OK' },
-            });
-            Object.defineProperties(xhrDetails.xhr, xhrDetails.props);
-            return;
-        }
-        Promise.resolve(xhrText).then(( ) => xhrDetails).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 1, configurable: true },
-                responseURL: { value: xhrDetails.url },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            xhrDetails.headers['content-length'] = `${details.props.response.value}`.length;
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 2, configurable: true },
-                status: { value: 200 },
-                statusText: { value: 'OK' },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 3, configurable: true },
-            });
-            Object.defineProperties(details.xhr, details.props);
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            return details;
-        }).then(details => {
-            Object.defineProperties(details.xhr, {
-                readyState: { value: 4 },
-            });
-            safeDispatchEvent(details.xhr, 'readystatechange');
-            safeDispatchEvent(details.xhr, 'load');
-            safeDispatchEvent(details.xhr, 'loadend');
-            safe.uboLog(logPrefix, `Prevented with response:\n${details.xhr.response}`);
-        });
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.getResponseHeader', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined || thisArg.readyState < thisArg.HEADERS_RECEIVED ) {
-            return context.reflect();
-        }
-        const headerName = `${context.callArgs[0]}`;
-        const value = xhrDetails.headers[headerName.toLowerCase()];
-        if ( value !== undefined && value !== '' ) { return value; }
-        return null;
-    });
-    proxyApplyFn('XMLHttpRequest.prototype.getAllResponseHeaders', function(context) {
-        const { thisArg } = context;
-        const xhrDetails = xhrInstances.get(thisArg);
-        if ( xhrDetails === undefined || thisArg.readyState < thisArg.HEADERS_RECEIVED ) {
-            return context.reflect();
-        }
-        const out = [];
-        for ( const [ name, value ] of Object.entries(xhrDetails.headers) ) {
-            if ( !value ) { continue; }
-            out.push(`${name}: ${value}`);
-        }
-        if ( out.length !== 0 ) { out.push(''); }
-        return out.join('\r\n');
-    });
 }
 
 function proxyApplyFn(
@@ -2006,18 +1347,6 @@ function runAt(fn, when) {
     const safe = safeSelf();
     const args = [ 'readystatechange', onStateChange, { capture: true } ];
     safe.addEventListener.apply(document, args);
-}
-
-function runAtHtmlElementFn(fn) {
-    if ( document.documentElement ) {
-        fn();
-        return;
-    }
-    const observer = new MutationObserver(( ) => {
-        observer.disconnect();
-        fn();
-    });
-    observer.observe(document, { childList: true });
 }
 
 function safeSelf() {
@@ -2356,79 +1685,6 @@ function setConstantFn(
     }, extraArgs.runAt);
 }
 
-function trapPropertyFn(propChain, handler, options = {}) {
-    if ( propChain === '' ) { return; }
-    let owner = self;
-    let prop = propChain;
-    for (;;) {
-        const pos = prop.indexOf('.');
-        if ( pos === -1 ) { break; }
-        owner = owner[prop.slice(0, pos)];
-        if ( owner instanceof Object === false ) { return; }
-        prop = prop.slice(pos + 1);
-    }
-    const safe = safeSelf();
-    if ( trapPropertyFn.db === undefined ) {
-        trapPropertyFn.db = new WeakMap();
-        trapPropertyFn.entryFromContext = (owner, prop) => {
-            const handlers = trapPropertyFn.db.get(owner);
-            return handlers?.get(prop);
-        };
-        trapPropertyFn.getter = (owner, prop) => {
-            const entry = trapPropertyFn.entryFromContext(owner, prop);
-            if ( entry === undefined ) { return; }
-            let r = entry.value;
-            for ( const desc of entry.stack ) {
-                try { r = desc.get(); } catch (e) {
-                    if ( entry.canThrow ) { throw e; }
-                }
-            }
-            return r;
-        };
-        trapPropertyFn.setter = (owner, prop, value) => {
-            const entry = trapPropertyFn.entryFromContext(owner, prop);
-            if ( entry === undefined ) { return; }
-            entry.value = value;
-            for ( const desc of entry.stack ) {
-                try { desc.set(value); } catch (e) {
-                    if ( entry.canThrow ) { throw e; }
-                }
-            }
-        };
-    }
-    const { db } = trapPropertyFn;
-    const handlers = db.get(owner) || new Map();
-    if ( handlers.size === 0 ) {
-        db.set(owner, handlers);
-    }
-    const entry = handlers.get(prop) || {
-        value: owner[prop],
-        stack: [],
-    };
-    entry.stack.push(handler);
-    if ( entry.stack.length > 1 ) { return entry.value; }
-    Object.assign(entry, options);
-    handlers.set(prop, entry);
-    const desc = safe.Object_getOwnPropertyDescriptor(owner, prop);
-    if ( desc instanceof safe.Object ) {
-        if ( desc.get || desc.set ) {
-            entry.stack.push(desc);
-        }
-    }
-    try {
-        safe.Object_defineProperty(owner, prop, {
-            get() {
-                return trapPropertyFn.getter(owner, prop);
-            },
-            set(value) {
-                trapPropertyFn.setter(owner, prop, value);
-            }
-        });
-    } catch {
-    }
-    return entry.value;
-}
-
 function trustedEditInboundObject(propChain = '', argPos = '', jsonq = '') {
     editInboundObjectFn(true, propChain, argPos, jsonq);
 }
@@ -2650,12 +1906,12 @@ scriptletGlobals.origins = (( ) => {
     return out;
 })();
 
-scriptletGlobals.functionRefs = /* 43 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,noWindowOpenIf,setConstant,abortCurrentScript,preventXhr,preventSetTimeout,preventFetch,,,,,,,preventAddEventListener,,,,,,,,jsonEditFetchResponse,,,,,,,,,,,,editObjectOnSetter];
+scriptletGlobals.functionRefs = /* 31 */ [trustedEditInboundObject,adjustSetTimeout,jsonPruneFetchResponse,jsonPruneXhrResponse,trustedReplaceXhrResponse,trustedReplaceFetchResponse,trustedPreventDomBypass,jsonPrune,,,,setConstant,,,,,,,,,,,,,,,,,,,jsonEditFetchResponse];
 
 /******************************************************************************/
 
 // End of local scope
-})("28049053-2f06-4210-9323-9d4634fd8974");
+})("be769aed-639e-4eca-8576-829041f0f963");
 
 void 0;
 
@@ -2687,7 +1943,7 @@ const $hasRegexes$ = false;
 const todo = new Set();
 
 if ( $hasHostnames$ ) {
-    const scriptletHostnames = /* 12 */ ["xnxx.*","pornhub.*","xvideos.*","xhamster.*","pornhub.com","xvideos.com","youtube.com","xhamster.com","m.youtube.com","tv.youtube.com","www.youtube.com","music.youtube.com"];
+    const scriptletHostnames = /* 5 */ ["youtube.com","m.youtube.com","tv.youtube.com","www.youtube.com","music.youtube.com"];
     const collectArglistRefIndices = (out, hn, r) => {
         let l = 0, i = 0, d = 0;
         let candidate = '';
@@ -2732,7 +1988,7 @@ if ( $hasHostnames$ ) {
     }
     // Collect arglist references
     if ( todoIndices.size ) {
-        const arglistRefs = /* 12 */ ["2332,2333,2334,2335","518,800,3826,3827,3828","2332,2333,2334,2335","3186,3187,3188,3189,3190","518","61,3174","23,-62,-1571,-1956","4110,4111","13,23,389,390,391,392,393,394,395","15,23,389,390,391,392,394","1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,389,390,391,392,394","23,389,390,391,392,393,394"];
+        const arglistRefs = /* 5 */ ["23,-62,-1571,-1956","13,23,389,390,391,392,393,394,395","15,23,389,390,391,392,394","1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,389,390,391,392,394","23,389,390,391,392,393,394"];
         for ( const i of todoIndices ) {
             for ( const ref of JSON.parse(`[${arglistRefs[i]}]`) ) {
                 todo.add(ref);
@@ -2764,8 +2020,8 @@ if ( $hasRegexes$ ) {
 
 // Execute scriptlets
 if ( todo.size && todo.has(0) === false ) {
-    const arglists = /* 4112 */ ["","0,0,1,2","0,0,1,3","0,0,1,4","0,0,1,5","0,0,1,6","0,0,1,7","0,0,1,8","0,0,1,9","0,0,1,10","1,11,12,13","2,14,15,16,17","2,18,15,16,19","2,20,15,16,21","3,14,15,16,22","4,23,24,25","4,26,15,25","4,27,28,22","5,23,24,29","5,30,24,29","5,30,24,31","6,32,33","6,32,34","7,35","5,30,24,36","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","10","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,461,59","11,462,59","11,463,59","11,464,59","7,465","2,466,15,16,467","30,468,16,469","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,587,70","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","12,416,830","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","22,761,2026","11,2027,150","11,2028,59","11,2029,59","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","22,179,2671","","","","","","","","","","","","22,179,11,407,2684","12,99,2685","42,2686,2687","42,2686,2688","42,2686,2689","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","14,3245","10,304","11,3246,417","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","13,3523","15,3523"];
-    const args = /* 3524 */ ["JSON.stringify","0","[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}","[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}","[?.attestationRequest][?.context.client.userAgent*=\"inline\"].playbackContext.contentPlaybackContext+={\"isInlinePlaybackNoAd\":true}","[?.attestationRequest][?.context.client.userAgent*=\"oaeb\"]+={\"params\":\"oAEBogYBLg\"}","[?.attestationRequest][?.context.client.userAgent=/adunit|channel|inline|yahi|oaeb|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[?.createCommentParams].context.client.userAgent=repl({\"regex\":\"/; (adunit|channel|inline|yahi|oaeb|eafg|yaf4)\\b/\",\"replacement\":\"\"})","[?.serializedThirdPartyEmbedConfig][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB_EMBEDDED_PLAYER\"]+={\"clientScreen\":\"CHANNEL\"}","[?.serializedThirdPartyEmbedConfig][?.context.client.userAgent*=\"eafg\"]+={\"params\":\"eAFgAQ\"}","[?.context.thirdParty.embeddedPlayerContext][?.context.client.userAgent=/channel|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[native code]","17000","0.001","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots","","propsToMatch","/\\/player(\\?|$)/","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots","/playlist?","endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.playerAds endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adPlacements endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adSlots","/resolve_url?","/\\/player(?:\\?.+)?$/","\"adPlacements\"","\"no_ads\"","/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/","/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/","/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms","$1","player?","\"adSlots\"","/^\\W+$/","Node.prototype.appendChild","fetch","Request","entries.[-].command.reelWatchEndpoint.adClientParams.isAd","/get_watch?","","","","","","","","","","","","","","","","","","","","","","","undefined","","","","","","","","","","","true","","","","","","","","","","","","","","","","","","","","","","","","","","","","","document.createElement","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","noopFunc","","","","","","","","","","","","","","","","","","","","","","","","","","","","","click","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ads","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","elements","","","","","","","","","Object.defineProperty","1","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ytInitialPlayerResponse.playerAds","ytInitialPlayerResponse.adPlacements","ytInitialPlayerResponse.adSlots","playerResponse.adPlacements","playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important","reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd","url:/reel_watch_sequence?","..itemSectionRenderer.contents.*[?.adSlotRenderer]","/get_watch","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","page_params.holiday_promo","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","DOMContentLoaded","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","trafficjunky","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","/dyn\\.ads|loadAdsDelayed/","xv.sda.pp.init","xv.conf.dyn.ads","xv.conf.dyn.excld","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ShouldShow","","","","","","","","","","","","",".main-wrap","window.ts","initials",".*[?.advertiser]","$./^(bannerUnderComments|bannerBottom)$/","$.xplayerPluginSettings./^(ads|banner|bannerBottom)$/","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","adsbytrafficjunkycontext","abp1","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","/hpyjmp|marzaent/"];
+    const arglists = /* 396 */ ["","0,0,1,2","0,0,1,3","0,0,1,4","0,0,1,5","0,0,1,6","0,0,1,7","0,0,1,8","0,0,1,9","0,0,1,10","1,11,12,13","2,14,15,16,17","2,18,15,16,19","2,20,15,16,21","3,14,15,16,22","4,23,24,25","4,26,15,25","4,27,28,22","5,23,24,29","5,30,24,29","5,30,24,31","6,32,33","6,32,34","7,35","5,30,24,36","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","11,461,59","11,462,59","11,463,59","11,464,59","7,465","2,466,15,16,467","30,468,16,469"];
+    const args = /* 470 */ ["JSON.stringify","0","[?.attestationRequest][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB\"]+={\"clientScreen\":\"CHANNEL\"}","[?.attestationRequest][?.context.client.userAgent*=\"yahi\"]+={\"params\":\"YAHI\"}","[?.attestationRequest][?.context.client.userAgent*=\"inline\"].playbackContext.contentPlaybackContext+={\"isInlinePlaybackNoAd\":true}","[?.attestationRequest][?.context.client.userAgent*=\"oaeb\"]+={\"params\":\"oAEBogYBLg\"}","[?.attestationRequest][?.context.client.userAgent=/adunit|channel|inline|yahi|oaeb|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[?.createCommentParams].context.client.userAgent=repl({\"regex\":\"/; (adunit|channel|inline|yahi|oaeb|eafg|yaf4)\\b/\",\"replacement\":\"\"})","[?.serializedThirdPartyEmbedConfig][?.context.client.userAgent*=\"channel\"].context.client[?.clientName==\"WEB_EMBEDDED_PLAYER\"]+={\"clientScreen\":\"CHANNEL\"}","[?.serializedThirdPartyEmbedConfig][?.context.client.userAgent*=\"eafg\"]+={\"params\":\"eAFgAQ\"}","[?.context.thirdParty.embeddedPlayerContext][?.context.client.userAgent=/channel|eafg|yaf4/].playbackContext.contentPlaybackContext.referer=repl({\"regex\":\"(?:#reloadxhr)?$\",\"replacement\":\"#reloadxhr\"})","[native code]","17000","0.001","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots [].playerResponse.adPlacements [].playerResponse.adSlots","","propsToMatch","/\\/player(\\?|$)/","adPlacements adSlots playerResponse.adPlacements playerResponse.adSlots","/playlist?","endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.playerAds endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adPlacements endpoint.watchEndpoint.unserializedPrefetchData.playerResponse.adSlots","/resolve_url?","/\\/player(?:\\?.+)?$/","\"adPlacements\"","\"no_ads\"","/playlist\\?list=|\\/player(?:\\?.+)?$|watch\\?[tv]=/","/\"adPlacements.*?([A-Z]\"\\}|\"\\}{2,4})\\}\\],/","/\"adPlacements.*?(\"adSlots\"|\"adBreakHeartbeatParams\")/gms","$1","player?","\"adSlots\"","/^\\W+$/","Node.prototype.appendChild","fetch","Request","entries.[-].command.reelWatchEndpoint.adClientParams.isAd","/get_watch?","","","","","","","","","","","","","","","","","","","","","","","undefined","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","ytInitialPlayerResponse.playerAds","ytInitialPlayerResponse.adPlacements","ytInitialPlayerResponse.adSlots","playerResponse.adPlacements","playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots important","reelWatchSequenceResponse.entries.[-].command.reelWatchEndpoint.adClientParams.isAd entries.[-].command.reelWatchEndpoint.adClientParams.isAd","url:/reel_watch_sequence?","..itemSectionRenderer.contents.*[?.adSlotRenderer]","/get_watch"];
     const { functionRefs } = scriptletGlobals;
     for ( const ref of todo ) {
         if ( ref < 0 ) { continue; }
@@ -2780,7 +2036,7 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("28049053-2f06-4210-9323-9d4634fd8974");
+})("be769aed-639e-4eca-8576-829041f0f963");
 
 void 0;
 
@@ -2802,41 +2058,6 @@ scriptletGlobals.functionRefs = undefined
 /******************************************************************************/
 
 // End of local scope
-})("28049053-2f06-4210-9323-9d4634fd8974");
+})("be769aed-639e-4eca-8576-829041f0f963");
 
 void 0;
-
-/*******************************************************************************
-    Copyright (C) 2026 Duck Duck Go, Inc.
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see {http://www.gnu.org/licenses/}.
-*/
-
-// The mobile player reads its pre-roll from first-party config (flashvars_<id>.adRollGlobalConfig),
-// which no network rule or upstream uBO scriptlet covers. Empty it before the player starts.
-(() => {
-    if (!/(^|\.)pornhub\.com$/.test(location.hostname)) {
-        return;
-    }
-    const clearAdRolls = () => {
-        for (const key of Object.keys(window)) {
-            const flashvars = key.startsWith('flashvars_') ? window[key] : null;
-            if (flashvars && Array.isArray(flashvars.adRollGlobalConfig) && flashvars.adRollGlobalConfig.length) {
-                flashvars.adRollGlobalConfig = [];
-            }
-        }
-    };
-    new MutationObserver(clearAdRolls).observe(document, { childList: true, subtree: true });
-    document.addEventListener('DOMContentLoaded', clearAdRolls);
-})();

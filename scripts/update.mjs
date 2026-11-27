@@ -2,23 +2,22 @@ import fs from 'fs';
 import { mergeContentScripts } from './merge-content-scripts.mjs';
 import { pruneScriptlet } from './prune-scriptlet.mjs';
 
-const includeExperimentalScriptlets = false;
-const includeLists = ['ublock-filters', 'ublock-experimental'];
-const includeHosts = [
-    'www.youtube.com',
-    'youtube.com',
-    'tv.youtube.com',
-    'm.youtube.com',
-    'music.youtube.com',
-    'pornhub.com',
-    'pornhub.*',
-    'xvideos.com',
-    'xvideos.*',
-    'xhamster.com',
-    'xhamster.*',
-    'xnxx.*',
+const sourceList = 'ublock-filters';
+// The apps accept only these two file names, so ublock-experimental.js carries the experiment sites rather than uBO's experimental list.
+const outputs = [
+    {
+        file: 'ublock-filters',
+        hosts: ['www.youtube.com', 'youtube.com', 'tv.youtube.com', 'm.youtube.com', 'music.youtube.com'],
+        matches: ['*://*.youtube.com/*'],
+        withCustomScriptlets: false,
+    },
+    {
+        file: 'ublock-experimental',
+        hosts: ['pornhub.com', 'pornhub.*', 'xvideos.com', 'xvideos.*', 'xhamster.com', 'xhamster.*', 'xnxx.*'],
+        matches: ['*://*.pornhub.com/*', '*://*.xvideos.com/*', '*://*.xhamster.com/*', '*://*.xnxx.com/*'],
+        withCustomScriptlets: true,
+    },
 ];
-const includeMatches = ['*://*.youtube.com/*', '*://*.pornhub.com/*', '*://*.xvideos.com/*', '*://*.xhamster.com/*', '*://*.xnxx.com/*'];
 const uBOLRef = 'refs/heads/main';
 const rulesetsPath = 'chromium/rulesets';
 const uBOLBaseURL = `https://raw.githubusercontent.com/uBlockOrigin/uBOL-home/${uBOLRef}/${rulesetsPath}`;
@@ -47,7 +46,7 @@ function fetchRuleset(path) {
 }
 
 /**
- * Our own scriptlets for one world, appended to the generated ublock-filters bundle because the
+ * Our own scriptlets for one world, appended to the generated ublock-experimental bundle because the
  * apps only accept the existing scriptlet file names. Each must check its own hostname.
  * @param {string} contextDir 'main' or 'isolated'
  * @returns {string}
@@ -70,33 +69,27 @@ function readCustomScriptlets(contextDir) {
     console.log('[Fetch scriptlet-details.json]');
     const scriptletDetails = JSON.parse(await fetchRuleset('scriptlet-details.json'));
     console.log(` - Available filter lists: ${scriptletDetails.map((pair) => pair[0]).join(', ')}`);
-    console.log(` - Selected filter lists: ${includeLists.join(', ')}`);
+    console.log(` - Source filter list: ${sourceList}`);
+    const scriptlets = Object.fromEntries(scriptletDetails)[sourceList];
     const contentScripts = [];
-    for (const [list, scriptlets] of scriptletDetails) {
-        if (!includeLists.includes(list)) {
-            continue;
-        }
-
+    for (const output of outputs) {
         for (const context of Object.keys(scriptlets)) {
-            if (scriptlets[context][0] !== '*' && scriptlets[context][0] !== 'www.youtube.com') {
-                console.warn(`Skipping scriptlet ${list} for context ${context}: only wildcard is supported`);
+            if (scriptlets[context][0] !== '*') {
+                console.warn(`Skipping ${sourceList} for context ${context}: only wildcard is supported`);
                 continue;
             }
             const contextDir = context.toLowerCase();
-            const scriptletName = `${contextDir}/${list}.js`;
-            console.log(`[Fetch ${scriptletName}]`);
-            fs.mkdirSync(`src/rulesets/scripting/scriptlet/${contextDir}`, { recursive: true });
-            if (list !== 'ublock-experimental' || includeExperimentalScriptlets) {
-                const [begin, ruleset, end] = await Promise.all(
-                    ['scriptlet-begin', list, 'scriptlet-end'].map((name) => fetchRuleset(`scripting/scriptlet/${contextDir}/${name}.js`)),
-                );
-                const custom = list === 'ublock-filters' ? readCustomScriptlets(contextDir) : '';
-                fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, includeHosts) + custom);
-            } else {
-                fs.writeFileSync(`src/scriptlets/${scriptletName}`, '');
-            }
+            const scriptletName = `${contextDir}/${output.file}.js`;
+            console.log(`[Build ${scriptletName} from ${sourceList}]`);
+            const [begin, ruleset, end] = await Promise.all(
+                ['scriptlet-begin', sourceList, 'scriptlet-end'].map((name) =>
+                    fetchRuleset(`scripting/scriptlet/${contextDir}/${name}.js`),
+                ),
+            );
+            const custom = output.withCustomScriptlets ? readCustomScriptlets(contextDir) : '';
+            fs.writeFileSync(`src/scriptlets/${scriptletName}`, pruneScriptlet({ begin, ruleset, end }, output.hosts) + custom);
             contentScripts.push({
-                matches: includeMatches,
+                matches: output.matches,
                 js: [`scriptlets/${scriptletName}`],
                 all_frames: false,
                 run_at: 'document_start',
