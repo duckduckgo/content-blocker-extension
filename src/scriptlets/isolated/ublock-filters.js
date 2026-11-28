@@ -436,7 +436,7 @@ scriptletGlobals.functionRefs = /* 2 */ [replaceNodeText,removeNodeText];
 /******************************************************************************/
 
 // End of local scope
-})("be769aed-639e-4eca-8576-829041f0f963");
+})("53fcf4d2-49bb-4393-a71d-8b50f97f973d");
 
 void 0;
 
@@ -561,7 +561,7 @@ if ( todo.size && todo.has(0) === false ) {
 /******************************************************************************/
 
 // End of local scope
-})("be769aed-639e-4eca-8576-829041f0f963");
+})("53fcf4d2-49bb-4393-a71d-8b50f97f973d");
 
 void 0;
 
@@ -583,6 +583,6 @@ scriptletGlobals.functionRefs = undefined
 /******************************************************************************/
 
 // End of local scope
-})("be769aed-639e-4eca-8576-829041f0f963");
+})("53fcf4d2-49bb-4393-a71d-8b50f97f973d");
 
 void 0;
